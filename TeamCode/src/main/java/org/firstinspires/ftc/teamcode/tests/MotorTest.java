@@ -19,13 +19,14 @@ public class MotorTest extends LinearOpMode {
             new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
     public static int encoder_position = 1150;
     public static double max_power = 1;
-    public static int Velocity = 1000;
+    public static int shooterVelocity = 1000;
     public static boolean read_only = false;
     public static boolean reverse_0 = false;
     public static boolean reset = true;
-    public static boolean set_power_mode = false;
-    public static boolean isSetVelocity = true;
-    public static String motor_name_0 = "intake";
+    public static boolean set_power_mode = true;
+    public static boolean isSetVelocity = false;
+    public static boolean otherMotor = false;
+    public static String motor_name_0 = "preShooter";
 
     @Override
     public void runOpMode() {
@@ -53,7 +54,7 @@ public class MotorTest extends LinearOpMode {
             } else {
                 if (!read_only) {
                     if (isSetVelocity) {
-                        motor0.setVelocity(Velocity);
+                        motor0.setVelocity(shooterVelocity);
                     } else {
                         motor0.setTargetPosition(encoder_position);
                         motor0.setMode(DcMotor.RunMode.RUN_TO_POSITION);
