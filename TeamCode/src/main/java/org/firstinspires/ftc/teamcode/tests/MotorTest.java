@@ -22,55 +22,82 @@ public class MotorTest extends LinearOpMode {
     public static int shooterVelocity = 1000;
     public static boolean read_only = false;
     public static boolean reverse_0 = false;
+    public static boolean reverse_1 = false;
     public static boolean reset = true;
-    public static boolean set_power_mode = true;
-    public static boolean isSetVelocity = false;
-    public static boolean otherMotor = false;
-    public static String motor_name_0 = "preShooter";
+    public static boolean set_power_mode = false;
+    public static boolean set_velocity_mode = true;
+    // Mode priority: power, velocity, position. Position mode only drives motor0.
+    public static boolean set_position_mode = false;
+    // Set dualMotor and motor names before pressing INIT.
+    public static boolean dualMotor = false;
+    public static String motor_name_0 = "shooterUp";
+    public static String motor_name_1 = "shooterDown";
 
     @Override
     public void runOpMode() {
         DcMotorEx motor0 = hardwareMap.get(DcMotorEx.class, motor_name_0);
-        motor0.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        DcMotorEx[] motors = dualMotor
+                ? new DcMotorEx[]{motor0, hardwareMap.get(DcMotorEx.class, motor_name_1)}
+                : new DcMotorEx[]{motor0};
+        for (DcMotorEx motor : motors) {
+            motor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        }
 
         waitForStart();
-        if (reset) {
-            motor0.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-            motor0.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        if (isStopRequested()) {
+            return;
         }
-        if (reverse_0) {
-            motor0.setDirection(DcMotorSimple.Direction.REVERSE);
+        for (int i = 0; i < motors.length; i++) {
+            if (reset) {
+                motors[i].setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+            }
+            motors[i].setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+            boolean reverse = i == 0 ? reverse_0 : reverse_1;
+            motors[i].setDirection(reverse
+                    ? DcMotorSimple.Direction.REVERSE : DcMotorSimple.Direction.FORWARD);
         }
 
-        while (opModeIsActive()) {
-            if (set_power_mode) {
+        try {
+            while (opModeIsActive()) {
                 if (read_only) {
-                    motor0.setPower(0);
+                    for (DcMotorEx motor : motors) {
+                        motor.setPower(0);
+                    }
+                } else if (set_power_mode) {
+                    for (DcMotorEx motor : motors) {
+                        motor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+                        motor.setPower(max_power);
+                    }
+                } else if (set_velocity_mode) {
+                    for (DcMotorEx motor : motors) {
+                        motor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+                        motor.setVelocity(shooterVelocity);
+                    }
+                } else if (set_position_mode) {
+                    for (int i = 1; i < motors.length; i++) {
+                        motors[i].setPower(0);
+                    }
+                    motor0.setTargetPosition(encoder_position);
+                    motor0.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+                    motor0.setPower(Math.abs(max_power));
+                    telemetry_M.addData("position_target", encoder_position);
                 } else {
-                    motor0.setPower(max_power);
-                }
-                motor0.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-
-            } else {
-                if (!read_only) {
-                    if (isSetVelocity) {
-                        motor0.setVelocity(shooterVelocity);
-                    } else {
-                        motor0.setTargetPosition(encoder_position);
-                        motor0.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-                        motor0.setPower(max_power);
-
-                        sleep(10000);
-                        motor0.setTargetPosition(0);
-                        motor0.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-                        motor0.setPower(max_power);
+                    for (DcMotorEx motor : motors) {
+                        motor.setPower(0);
                     }
                 }
-                telemetry_M.addData("is busy_1", motor0.isBusy());
+                for (int i = 0; i < motors.length; i++) {
+                    telemetry_M.addData("is busy_" + i, motors[i].isBusy());
+                    telemetry_M.addData("encoder_" + i, motors[i].getCurrentPosition());
+                    telemetry_M.addData("velocity_" + i, motors[i].getVelocity());
+                }
+                telemetry_M.update();
+                idle();
             }
-            telemetry_M.addData("encoder_0", motor0.getCurrentPosition());
-            telemetry_M.addData("velocity_0", motor0.getVelocity());
-            telemetry_M.update();
+        } finally {
+            for (DcMotorEx motor : motors) {
+                motor.setPower(0);
+            }
         }
     }
 }
