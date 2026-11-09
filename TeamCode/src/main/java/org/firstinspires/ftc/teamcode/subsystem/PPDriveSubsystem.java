@@ -6,6 +6,7 @@ import com.pedropathing.drivetrain.DrivePowers;
 import com.pedropathing.follower.Follower;
 import com.pedropathing.follower.ManualDrive;
 import com.pedropathing.math.Pose;
+import com.pedropathing.math.Velocity;
 import com.pedropathing.utils.Angle;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
@@ -177,6 +178,11 @@ public class PPDriveSubsystem {
     // Pose / Localization
     public Pose getPose() {
         return follower.pose();
+    }
+
+    /** 场地坐标系速度：vx / vy（in/s）、omega（rad/s）。 */
+    public Velocity getVelocity() {
+        return follower.velocity();
     }
 
     public void setPose(Pose pose) {
