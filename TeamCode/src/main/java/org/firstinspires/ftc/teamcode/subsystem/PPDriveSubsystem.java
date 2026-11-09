@@ -1,6 +1,6 @@
 package org.firstinspires.ftc.teamcode.subsystem;
 
-import com.acmerobotics.dashboard.config.Config;
+import com.bylazar.configurables.annotations.Configurable;
 import com.pedropathing.controllers.PIDController;
 import com.pedropathing.drivetrain.DrivePowers;
 import com.pedropathing.follower.Follower;
@@ -16,11 +16,11 @@ import static com.pedropathing.ivy.commands.Commands.infinite;
 
 import com.pedropathing.ivy.Command;
 
-@Config
+@Configurable
 public class PPDriveSubsystem {
 
 
-    // Dashboard Configuration
+    // Panels Configuration
     public static double headingKp = 1.75;
     public static double headingKi = 0.0;
     public static double headingKd = 0.09;

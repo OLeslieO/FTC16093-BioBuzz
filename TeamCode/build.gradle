@@ -32,8 +32,3 @@ dependencies {
     implementation "org.solverslib:core:0.3.6" // core
     implementation "org.solverslib:pedroPathing:0.3.6" // pedroPathing
 }
-repositories {
-    maven {
-        url "https://repo.dairy.foundation/releases"
-    }
-}

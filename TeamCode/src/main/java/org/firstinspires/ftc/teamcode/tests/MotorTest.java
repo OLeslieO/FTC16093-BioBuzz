@@ -1,22 +1,19 @@
 package org.firstinspires.ftc.teamcode.tests;
 
-import com.acmerobotics.dashboard.FtcDashboard;
-import com.acmerobotics.dashboard.config.Config;
-import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
+import com.bylazar.configurables.annotations.Configurable;
+import com.bylazar.telemetry.PanelsTelemetry;
+import com.bylazar.telemetry.TelemetryManager;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 
-import org.firstinspires.ftc.robotcore.external.Telemetry;
-
 @TeleOp(name = "motor test", group = "test")
-@Config
+@Configurable
 public class MotorTest extends LinearOpMode {
 
-    private final Telemetry telemetry_M =
-            new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
+    private final TelemetryManager panelsTelemetry = PanelsTelemetry.INSTANCE.getTelemetry();
     public static int encoder_position = 1150;
     public static double max_power = 1;
     public static int shooterVelocity = 1000;
@@ -80,18 +77,18 @@ public class MotorTest extends LinearOpMode {
                     motor0.setTargetPosition(encoder_position);
                     motor0.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                     motor0.setPower(Math.abs(max_power));
-                    telemetry_M.addData("position_target", encoder_position);
+                    panelsTelemetry.addData("position_target", encoder_position);
                 } else {
                     for (DcMotorEx motor : motors) {
                         motor.setPower(0);
                     }
                 }
                 for (int i = 0; i < motors.length; i++) {
-                    telemetry_M.addData("is busy_" + i, motors[i].isBusy());
-                    telemetry_M.addData("encoder_" + i, motors[i].getCurrentPosition());
-                    telemetry_M.addData("velocity_" + i, motors[i].getVelocity());
+                    panelsTelemetry.addData("is busy_" + i, motors[i].isBusy());
+                    panelsTelemetry.addData("encoder_" + i, motors[i].getCurrentPosition());
+                    panelsTelemetry.addData("velocity_" + i, motors[i].getVelocity());
                 }
-                telemetry_M.update();
+                panelsTelemetry.update(telemetry);
                 idle();
             }
         } finally {

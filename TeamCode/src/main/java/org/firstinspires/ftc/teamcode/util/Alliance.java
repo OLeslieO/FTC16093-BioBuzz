@@ -106,7 +106,7 @@ public enum Alliance {
 
     /**
      * 本方云台瞄准点，供云台瞄准使用。heading 无意义，固定为 0。
-     * 每次调用都重新读取 {@link FieldConstants}，这样 Dashboard 改值即时生效。
+     * 每次调用都重新读取 {@link FieldConstants}，这样 Panels 改值即时生效。
      */
     public Pose getAimPose() {
         return new Pose(getAimX(), getAimY(), 0.0);
