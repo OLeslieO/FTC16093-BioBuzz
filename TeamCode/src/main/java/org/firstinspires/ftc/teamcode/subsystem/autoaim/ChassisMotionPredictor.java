@@ -13,7 +13,7 @@ import com.pedropathing.math.Velocity;
  * "实测加速度和刹车减速度的加权"代替纯实测加速度（实测值有滞后），
  * 并且预测速度不允许越过 0 反向。
  */
-final class ChassisMotionPredictor {
+public class ChassisMotionPredictor {
 
     /** 预测结果，全部是场地坐标系。 */
     static final class Prediction {
