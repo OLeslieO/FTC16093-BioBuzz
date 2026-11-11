@@ -51,7 +51,7 @@ public class DriveTeleOp extends CommandOpModeEx {
         // 摇杆 y 向前推是负值，所以取反
         drive.setDefaultCommand(new DriveCommand(
                 drive,
-                () -> -gamepad1.left_stick_x,
+                () -> gamepad1.left_stick_x,
                 () -> -gamepad1.left_stick_y,
                 () -> gamepad1.right_stick_x,
                 () -> gamepad1.right_trigger > SLOW_TRIGGER_THRESHOLD ? SLOW_SCALE : 1.0

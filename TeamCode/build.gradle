@@ -12,6 +12,11 @@ buildscript {
 apply plugin: 'com.android.application'
 apply plugin: 'dev.frozenmilk.sinister.sloth.load'
 
+// Sloth: don't auto-run "adb connect 192.168.43.1" on deploy (causes "more than one device" when USB is also plugged in)
+load {
+    autoconnect = dev.frozenmilk.sinister.sloth.AutoConnect.valueOf("NEVER")
+}
+
 //
 // build.gradle in TeamCode
 //

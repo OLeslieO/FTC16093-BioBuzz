@@ -13,7 +13,7 @@ import com.qualcomm.robotcore.util.Range;
 public class ServoTest extends LinearOpMode {
 
     // Set dualServo and servo names before pressing INIT.
-    public static boolean dualServo = false;
+    public static boolean dualServo = true;
     public static String servo_name_0 = "leftIntakeServo";
     public static String servo_name_1 = "rightIntakeServo";
     // Adjust live in Panels after START. Valid positions range from 0 to 1.
