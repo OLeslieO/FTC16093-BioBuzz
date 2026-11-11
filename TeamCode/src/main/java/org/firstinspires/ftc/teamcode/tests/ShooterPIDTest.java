@@ -90,11 +90,11 @@ public class ShooterPIDTest extends LinearOpMode {
                 intake1.setPower(0);
             }
             if(gamepad1.right_bumper){
-                nectarGate.setPosition(0.5);
-                pollenGate.setPosition(0.5);
+                nectarGate.setPosition(0);
+                pollenGate.setPosition(0.9);
             }else {
-                nectarGate.setPosition(1);
-                pollenGate.setPosition(1);
+                nectarGate.setPosition(0.33);
+                pollenGate.setPosition(0.74);
             }
 
 

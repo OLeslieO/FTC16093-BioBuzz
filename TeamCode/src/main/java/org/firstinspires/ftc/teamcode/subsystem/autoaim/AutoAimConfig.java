@@ -90,10 +90,10 @@ public class AutoAimConfig {
     // ---------------------------------------------------------------
 
     /** 克服静摩擦 / CR 死区的功率，按目标角速度方向叠加。 */
-    public static double kS = 0.13;
+    public static double kS = 0.14;
 
     /** 每 rad/s 目标角速度对应的功率。= TurretServoTest 的 kV 0.006 × 57.2958。 */
-    public static double kV = 0.3438;
+    public static double kV = 0.11;
 
     /** 每 rad/s² 目标角加速度对应的功率。TurretServoTest 里没有整定过，先置 0。 */
     public static double kA = 0.0;
@@ -111,7 +111,7 @@ public class AutoAimConfig {
     public static double FF_DEADBAND = 0.05;
 
     /** 速度环比例项：每 rad/s 速度误差对应的功率。= TurretServoTest 的 KP_VEL 0.0022 × 57.2958。 */
-    public static double KP_VEL = 0.126;
+    public static double KP_VEL = 0.06;
 
     /** 云台测量角速度的低通系数（0~1，越大越跟手、越吵）。 */
     public static double VEL_FILTER_ALPHA = 0.5;
@@ -132,7 +132,7 @@ public class AutoAimConfig {
     public static double CHASSIS_ACCEL_FILTER_ALPHA = 0.4;
 
     /** 底盘角速度的低通系数。 */
-    public static double OMEGA_FILTER_ALPHA = 0.7;
+    public static double OMEGA_FILTER_ALPHA = 0.1;
 
     /** 定位数据的延迟（秒）：位姿 / 速度都按这个时间往前外推。 */
     public static double POSE_LATENCY = 0.015;
