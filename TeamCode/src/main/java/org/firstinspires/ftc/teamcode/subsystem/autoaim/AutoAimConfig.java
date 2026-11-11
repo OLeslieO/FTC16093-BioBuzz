@@ -18,15 +18,30 @@ public class AutoAimConfig {
     // 硬件
     // ---------------------------------------------------------------
 
-    /** 云台电机在配置文件里的名字。 */
-    public static String MOTOR_NAME = "turret";
+    /** 两个 CR 舵机（Axon MAX MK2）在配置文件里的名字，共同驱动云台，收到同一个功率。 */
+    public static String SERVO_NAME_0 = "lala1";
+    public static String SERVO_NAME_1 = "lala2";
 
-    /** 让"正功率 = 云台逆时针转（俯视），编码器随之增大"。方向反了就翻转这个。 */
-    public static boolean MOTOR_REVERSED = false;
+    /** 每个舵机的方向。要让"正功率 = 云台逆时针转（俯视），编码器读数随之增大"。 */
+    public static boolean SERVO_REVERSED_0 = false;
+    public static boolean SERVO_REVERSED_1 = false;
 
-    /** 云台转一整圈（360°）对应的编码器 ticks = 电机每圈 ticks × 总减速比。 */
-    // 6.75 *
-    public static double TICKS_PER_TURRET_REV = 1000.0;
+    /** Through Bore 插在哪个电机端口，就填那个电机在配置文件里的名字（不会给它输出功率）。 */
+    public static String ENCODER_NAME = "intake1";
+
+    /** 只翻转编码器读数的符号，用来对齐"正功率 → 角度增大"。 */
+    public static boolean ENCODER_REVERSED = false;
+
+    /** REV Through Bore v1：编码器轴转一圈的 counts。 */
+    public static double ENCODER_CPR = 8192.0;
+
+    /** 编码器轴转一圈，云台转几圈（与 TurretServoTest 里的 ENCODER_TO_TURRET 相同）。 */
+    public static double ENCODER_TO_TURRET = 0.14814815;
+
+    /** 云台转一整圈（360°）对应的编码器 ticks。 */
+    public static double ticksPerTurretRev() {
+        return ENCODER_CPR / ENCODER_TO_TURRET;
+    }
 
     /** 编码器读数为 0 时，云台相对机器人正前方的角度（度）。开机时手动摆正前方则为 0。 */
     public static double ZERO_OFFSET_DEG = 0.0;
@@ -36,11 +51,11 @@ public class AutoAimConfig {
     // ---------------------------------------------------------------
 
     /** 云台允许转到的最小 / 最大角度（度，相对机器人正前方），由线缆和机械限位决定。 */
-    public static double MIN_ANGLE_DEG = -120.0;
-    public static double MAX_ANGLE_DEG = 120.0;
+    public static double MIN_ANGLE_DEG = -125.0;
+    public static double MAX_ANGLE_DEG = 125.0;
 
     /** 离机械限位这么近（度）时，禁止继续朝限位方向输出功率。 */
-    public static double LIMIT_MARGIN_DEG = 2.0;
+    public static double LIMIT_MARGIN_DEG = 3.0;
 
     // ---------------------------------------------------------------
     // 几何
@@ -60,47 +75,51 @@ public class AutoAimConfig {
     // ---------------------------------------------------------------
 
     /** 每弧度误差对应的目标角速度（1/s）。 */
-    public static double KP_POS = 8.0;
+    public static double KP_POS = 3.0;
 
-    /** 目标角速度上限（rad/s），应略低于云台实测最大转速。 */
-    public static double MAX_TURRET_VEL = 10.0;
+    /** 目标角速度上限（rad/s），应略低于云台实测最大转速。（TurretServoTest 实测值 130°/s） */
+    public static double MAX_TURRET_VEL = 2.269;
 
     /** 误差小于这个角度（度）时位置环不出力，只保留前馈，避免抖动。 */
-    public static double DEADBAND_DEG = 0.3;
+    public static double DEADBAND_DEG = 0.6;
 
     // ---------------------------------------------------------------
-    // 电机前馈 + 速度环（目标角速度 -> 功率）
+    // 舵机前馈 + 速度环（目标角速度 -> 功率）
+    // 数值由 TurretServoTest 整定（那里单位是 °/s），这里已换算成 rad/s。
+    // CR 舵机由稳压 5V/6V 供电，不做电池电压补偿。
     // ---------------------------------------------------------------
 
-    /** 克服静摩擦的功率，按目标角速度方向叠加。 */
-    public static double kS = 0.03;
+    /** 克服静摩擦 / CR 死区的功率，按目标角速度方向叠加。 */
+    public static double kS = 0.13;
 
-    /** 每 rad/s 目标角速度对应的功率（在 {@link #NOMINAL_VOLTAGE} 下测得）。 */
-    public static double kV = 0.08;
+    /** 每 rad/s 目标角速度对应的功率。= TurretServoTest 的 kV 0.006 × 57.2958。 */
+    public static double kV = 0.3438;
 
-    /** 每 rad/s² 目标角加速度对应的功率。 */
-    public static double kA = 0.005;
+    /** 每 rad/s² 目标角加速度对应的功率。TurretServoTest 里没有整定过，先置 0。 */
+    public static double kA = 0.0;
 
-    /** 目标角速度低于这个值（rad/s）时不叠加 kS，防止静止时来回抖。 */
-    public static double KS_MIN_VEL = 0.05;
+    /**
+     * kS 的斜坡宽度（rad/s）：目标角速度 |v| 小于它时，叠加的静摩擦功率 = kS × v / 这个值，
+     * 大于它时是满额 kS。越大，静止附近越不容易抖，但小速度时越没力。（0.15 ≈ 8.6°/s）
+     */
+    public static double KS_RAMP_VEL = 0.15;
 
-    /** 速度环比例项：每 rad/s 速度误差对应的功率。先用 0，前馈调好后再加。 */
-    public static double KP_VEL = 0.0;
+    /**
+     * 前馈角速度的软死区（rad/s）：|前馈| 小于它时当作 0。用来滤掉底盘静止时
+     * 定位速度 / 角速度噪声造成的前馈抖动。（0.05 ≈ 2.9°/s）
+     */
+    public static double FF_DEADBAND = 0.05;
+
+    /** 速度环比例项：每 rad/s 速度误差对应的功率。= TurretServoTest 的 KP_VEL 0.0022 × 57.2958。 */
+    public static double KP_VEL = 0.126;
+
+    /** 云台测量角速度的低通系数（0~1，越大越跟手、越吵）。 */
+    public static double VEL_FILTER_ALPHA = 0.5;
 
     /** 目标角加速度的低通系数（0~1，越大越跟手、越吵）。 */
     public static double CMD_ACCEL_FILTER_ALPHA = 0.15;
 
     public static double MAX_POWER = 1.0;
-
-    // ---------------------------------------------------------------
-    // 电压补偿
-    // ---------------------------------------------------------------
-
-    /** 整定 kS / kV / kA 时的电池电压。功率会按 NOMINAL / 当前电压 放大。 */
-    public static double NOMINAL_VOLTAGE = 12.5;
-
-    /** 读电压的间隔（秒）。读电压比较慢，不必每帧读。 */
-    public static double VOLTAGE_READ_PERIOD = 0.25;
 
     // ---------------------------------------------------------------
     // 底盘运动估计

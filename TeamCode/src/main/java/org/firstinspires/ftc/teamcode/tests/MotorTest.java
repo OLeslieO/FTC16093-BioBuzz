@@ -15,8 +15,11 @@ public class MotorTest extends LinearOpMode {
 
     private final TelemetryManager panelsTelemetry = PanelsTelemetry.INSTANCE.getTelemetry();
     public static int encoder_position = 1150;
+    // motor0 沿用原参数名，motor1 用 _1 后缀；单电机模式只读 motor0 的值
     public static double max_power = 1;
+    public static double max_power_1 = 1;
     public static int shooterVelocity = 1000;
+    public static int shooterVelocity_1 = 1000;
     public static boolean read_only = false;
     public static boolean reverse_0 = false;
     public static boolean reverse_1 = false;
@@ -61,14 +64,18 @@ public class MotorTest extends LinearOpMode {
                         motor.setPower(0);
                     }
                 } else if (set_power_mode) {
-                    for (DcMotorEx motor : motors) {
-                        motor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-                        motor.setPower(max_power);
+                    for (int i = 0; i < motors.length; i++) {
+                        motors[i].setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+                        double power = i == 0 ? max_power : max_power_1;
+                        motors[i].setPower(Math.max(-1.0, Math.min(1.0, power)));
+                        panelsTelemetry.addData("power_cmd_" + i, power);
                     }
                 } else if (set_velocity_mode) {
-                    for (DcMotorEx motor : motors) {
-                        motor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-                        motor.setVelocity(shooterVelocity);
+                    for (int i = 0; i < motors.length; i++) {
+                        motors[i].setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+                        int velocity = i == 0 ? shooterVelocity : shooterVelocity_1;
+                        motors[i].setVelocity(velocity);
+                        panelsTelemetry.addData("velocity_cmd_" + i, velocity);
                     }
                 } else if (set_position_mode) {
                     for (int i = 1; i < motors.length; i++) {

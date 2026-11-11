@@ -14,10 +14,10 @@ public class ServoTest extends LinearOpMode {
 
     // Set dualServo and servo names before pressing INIT.
     public static boolean dualServo = true;
-    public static String servo_name_0 = "leftIntakeServo";
-    public static String servo_name_1 = "rightIntakeServo";
+    public static String servo_name_0 = "lala1";
+    public static String servo_name_1 = "lala2";
     // Adjust live in Panels after START. Valid positions range from 0 to 1.
-    public static double servo_position_0 = 0.5;
+    public static double servo_position_0 = 1;
     public static double servo_position_1 = 0.5;
     // Only applied after START (re-read every loop).
     public static boolean reverse_0 = false;

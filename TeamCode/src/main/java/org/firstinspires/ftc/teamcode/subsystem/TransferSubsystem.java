@@ -2,6 +2,7 @@ package org.firstinspires.ftc.teamcode.subsystem;
 
 import com.bylazar.configurables.annotations.Configurable;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.seattlesolvers.solverslib.command.SubsystemBase;
 
@@ -17,18 +18,23 @@ public class TransferSubsystem extends SubsystemBase {
         STOP
     }
 
-    public static String INTAKE_MOTOR_NAME = "intake";
+    public static String INTAKE_MOTOR_NAME_0 = "intake";
+    public static String INTAKE_MOTOR_NAME_1 = "intake1";
 
     public static double INTAKE_POW = 1;
     public static double OUTAKE_POW = -0.8;
     public static double STOP_POW = 0.0;
 
-    private final DcMotorEx intkae;
+    private final DcMotorEx intake0, intake1;
 
     private State state = State.STOP;
 
     public TransferSubsystem(HardwareMap hardwareMap) {
-        intkae = hardwareMap.get(DcMotorEx.class, INTAKE_MOTOR_NAME);
+        intake0 = hardwareMap.get(DcMotorEx.class, INTAKE_MOTOR_NAME_0);
+        intake0.setDirection(DcMotorSimple.Direction.FORWARD);
+        intake1 = hardwareMap.get(DcMotorEx.class, INTAKE_MOTOR_NAME_1);
+        intake1.setDirection(DcMotorSimple.Direction.REVERSE);
+
     }
 
     public void setState(State state) {
@@ -69,6 +75,7 @@ public class TransferSubsystem extends SubsystemBase {
     @Override
     public void periodic() {
         double power = getTargetPower();
-        intkae.setPower(power);
+        intake0.setPower(power);
+        intake1.setPower(power);
     }
 }

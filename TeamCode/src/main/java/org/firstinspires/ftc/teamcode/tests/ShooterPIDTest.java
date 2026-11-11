@@ -15,34 +15,36 @@ import com.qualcomm.robotcore.hardware.Servo;
 public class ShooterPIDTest extends LinearOpMode {
     private final TelemetryManager panelsTelemetry = PanelsTelemetry.INSTANCE.getTelemetry();
     public static boolean isPIDControl = true;
-    public static double setP = 40;
+    public static double setP = 34;
     public static double setI = 0;
-    public static double setD = 17;
-    public static double setF = 17.5;
+    public static double setD = 0;
+    public static double setF = 16.5;
     public static double setShooterPower = 1;
     public static boolean isPowerMode = false;
     public static double setPreShooterPower = 1;
     //  public static double shooterMinVelocity = 1400.0;
-    public static double shooterVelocity = 1440;
+    public static double shooterVelocity = 1640;
+    public static boolean isPollen = true;
 
-    public static volatile double servo_pos = 0.54;
 
     @Override
     public void runOpMode() throws InterruptedException {
-        DcMotorEx shooterPollen = hardwareMap.get(DcMotorEx.class, "shooterPollen");
-        DcMotorEx shooterNectar = hardwareMap.get(DcMotorEx.class, "shooterNectar");
+        DcMotorEx shooterPollen = hardwareMap.get(DcMotorEx.class, "PollenShooter");
+        DcMotorEx shooterNectar = hardwareMap.get(DcMotorEx.class, "NectarShooter");
+        Servo pollenGate = hardwareMap.get(Servo.class, "pollenGate");
+        Servo nectarGate = hardwareMap.get(Servo.class, "nectarGate");
+
 
 
         DcMotorEx intake = hardwareMap.get(DcMotorEx.class, "intake");
-        DcMotorEx preShooter = hardwareMap.get(DcMotorEx.class, "preShooter");
+        DcMotorEx intake1 = hardwareMap.get(DcMotorEx.class, "intake1");
 
-        Servo preLimit = hardwareMap.get(Servo.class,"preLimit");
 
         shooterPollen.setDirection(DcMotorSimple.Direction.REVERSE);
-        shooterNectar.setDirection(DcMotorSimple.Direction.FORWARD);
+        shooterNectar.setDirection(DcMotorSimple.Direction.REVERSE);
 
-        intake.setDirection(DcMotorSimple.Direction.REVERSE);
-        preShooter.setDirection(DcMotorSimple.Direction.FORWARD);
+        intake.setDirection(DcMotorSimple.Direction.FORWARD);
+        intake1.setDirection(DcMotorSimple.Direction.REVERSE);
 
 
 
@@ -65,13 +67,13 @@ public class ShooterPIDTest extends LinearOpMode {
         waitForStart();
 
         while (opModeIsActive()) {
-            if(isPowerMode){
-                shooterPollen.setPower(setShooterPower);
-                shooterNectar.setPower(setShooterPower);
+            if(isPollen){
+                shooterPollen.setVelocity(shooterVelocity);
+
             }
             else{
-                shooterPollen.setVelocity(shooterVelocity);
                 shooterNectar.setVelocity(shooterVelocity);
+
 
 
             }
@@ -80,15 +82,21 @@ public class ShooterPIDTest extends LinearOpMode {
             if(gamepad1.a){
 
                 intake.setPower(1);
-                preShooter.setPower(setPreShooterPower);
-                preLimit.setPosition(1);
+                intake1.setPower(1);
             }
             else{
 
                 intake.setPower(0);
-                preShooter.setPower(0);
-                preLimit.setPosition(0.68);
+                intake1.setPower(0);
             }
+            if(gamepad1.right_bumper){
+                nectarGate.setPosition(0.5);
+                pollenGate.setPosition(0.5);
+            }else {
+                nectarGate.setPosition(1);
+                pollenGate.setPosition(1);
+            }
+
 
 //      if (frontShooter.getVelocity() < shooterMinVelocity) {
 //        //            if(gamepad1.b){\
@@ -98,8 +106,14 @@ public class ShooterPIDTest extends LinearOpMode {
 //      }
 //      }
 
+            // Panels Graph 只吃 telemetry 里的数值：目标和实际用同一个量纲（ticks/s）才能画在一起。
+            // 功率模式下没有目标转速，记 0。
+            double targetVelocity = isPowerMode ? 0.0 : shooterVelocity;
+            double pollenVelocity = shooterPollen.getVelocity();
+            panelsTelemetry.addData("Shooter Target Velocity", targetVelocity);
+            panelsTelemetry.addData("Shooter Pollen Velocity", pollenVelocity);
+            panelsTelemetry.addData("Shooter Velocity Error", targetVelocity - pollenVelocity);
             panelsTelemetry.addData("Shooter Nectar Velocity", shooterNectar.getVelocity());
-            panelsTelemetry.addData("Shooter Pollen Velocity", shooterPollen.getVelocity());
 
             panelsTelemetry.update(telemetry);
 

@@ -6,11 +6,11 @@ import com.pedropathing.ivy.Command;
 import com.pedropathing.math.Pose;
 import com.pedropathing.math.Velocity;
 import com.pedropathing.utils.Angle;
+import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
-import com.qualcomm.robotcore.hardware.VoltageSensor;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.util.Alliance;
@@ -19,7 +19,8 @@ import java.util.Objects;
 import java.util.function.Supplier;
 
 /**
- * 云台自动瞄准（支持边走边射）：根据机器人在场地上的 Pedro 位姿和速度，把云台转向
+ * 云台自动瞄准（支持边走边射）。执行机构是两个 Axon MAX MK2 CR 舵机，
+ * 角度由外置 REV Through Bore 编码器读取。：根据机器人在场地上的 Pedro 位姿和速度，把云台转向
  * {@link Alliance#getAimPose()}（即 {@code FieldConstants} 里的瞄准点）。
  *
  * <p>每个循环调用一次 {@link #update()}（或用 {@link #periodic()} 交给 Ivy）。
@@ -28,27 +29,27 @@ import java.util.function.Supplier;
  *
  * <p>每帧的计算流程：
  * <ol>
- *   <li>读电池电压（每 {@link AutoAimConfig#VOLTAGE_READ_PERIOD} 秒一次）</li>
+ *   <li>读云台角度 / 角速度（外置 Through Bore 编码器）</li>
  *   <li>底盘速度 / 加速度滤波；司机松摇杆时用刹车减速度预测（{@link ChassisMotionPredictor}）</li>
  *   <li>预测"出射时刻"的位姿：往前推 定位延迟 + 机械开火延迟（边走边射关闭时只推定位延迟）</li>
  *   <li>边走边射：虚拟目标 = 真实目标 − 出射点速度 × 滞空时间，滞空时间按距离查表并迭代</li>
  *   <li>云台目标角 = 指向虚拟目标的场地角 − 出射时 heading，在机械范围内选最近的等价角度</li>
  *   <li>速度前馈 = 视线角速度 − 底盘角速度：底盘怎么动，云台就提前反向补偿</li>
- *   <li>位置环输出目标角速度，再经 kS / kV / kA 前馈 + 速度环换算成功率，最后做电压补偿</li>
+ *   <li>位置环输出目标角速度，再经 kS / kV / kA 前馈 + 速度环换算成功率，同时发给两个 CR 舵机</li>
  * </ol>
  *
  * <p>需要你提供的实机参数（都在 {@link AutoAimConfig}，Panels 可调）：
  * <ul>
- *   <li>云台电机名、转向、整圈 ticks、零位、机械限位、旋转轴偏移</li>
- *   <li>电机特性 kS / kV / kA 和整定时的电压 NOMINAL_VOLTAGE</li>
+ *   <li>两个 CR 舵机名和方向、编码器端口名和方向、减速比、零位、机械限位、旋转轴偏移</li>
+ *   <li>舵机特性 kS / kV / KP_VEL（用 TurretServoTest 整定，换算成 rad/s）</li>
  *   <li>刹车减速度 FORWARD / LATERAL_BRAKE_DECEL</li>
  *   <li>机械开火延迟 SHOOT_DELAY、滞空时间表 FLIGHT_DIST_IN / FLIGHT_TIME_SEC</li>
  * </ul>
  */
 public class AutoAimSubsystem {
 
-    private final DcMotorEx motor;
-    private final HardwareMap hardwareMap;
+    private final CRServo[] servos;
+    private final DcMotorEx encoder;
     private final Supplier<Pose> poseSupplier;
     private final Supplier<Velocity> velocitySupplier;
     private final Telemetry telemetry;
@@ -63,8 +64,7 @@ public class AutoAimSubsystem {
     private double lastVelocityCommand = 0.0;
     private double filteredAccelCommand = 0.0;
 
-    private long lastVoltageReadNanos = 0;
-    private double batteryVoltage;
+    private double filteredVelocity = 0.0;
 
     private TurretAimCalculator.ShotSolution shot = null;
     private double fieldAngle = 0.0;
@@ -90,22 +90,23 @@ public class AutoAimSubsystem {
             Supplier<Velocity> velocitySupplier,
             boolean resetEncoder
     ) {
-        this.hardwareMap = Objects.requireNonNull(hardwareMap);
         this.telemetry = Objects.requireNonNull(telemetry);
         this.poseSupplier = Objects.requireNonNull(poseSupplier);
         this.velocitySupplier = Objects.requireNonNull(velocitySupplier);
 
-        motor = hardwareMap.get(DcMotorEx.class, AutoAimConfig.MOTOR_NAME);
-        motor.setDirection(AutoAimConfig.MOTOR_REVERSED
-                ? DcMotorSimple.Direction.REVERSE
-                : DcMotorSimple.Direction.FORWARD);
-        if (resetEncoder) {
-            motor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        }
-        motor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-        motor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        servos = new CRServo[]{
+                hardwareMap.get(CRServo.class, AutoAimConfig.SERVO_NAME_0),
+                hardwareMap.get(CRServo.class, AutoAimConfig.SERVO_NAME_1)
+        };
+        applyServoDirections();
 
-        batteryVoltage = readBatteryVoltage();
+        // Through Bore 插在电机端口上，只读编码器，不给这个端口输出功率
+        encoder = hardwareMap.get(DcMotorEx.class, AutoAimConfig.ENCODER_NAME);
+        if (resetEncoder) {
+            encoder.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        }
+        encoder.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        encoder.setPower(0.0);
     }
 
     // ---------------------------------------------------------------
@@ -122,7 +123,7 @@ public class AutoAimSubsystem {
         enabled = false;
         locked = false;
         power = 0.0;
-        motor.setPower(0.0);
+        setServoPower(0.0);
     }
 
     public boolean isEnabled() {
@@ -152,13 +153,13 @@ public class AutoAimSubsystem {
 
     /** 云台当前相对机器人正前方的角度（弧度）。 */
     public double getTurretAngle() {
-        return ticksToRadians(motor.getCurrentPosition())
+        return encoderSign() * ticksToRadians(encoder.getCurrentPosition())
                 + Math.toRadians(AutoAimConfig.ZERO_OFFSET_DEG);
     }
 
     /** 云台当前角速度（rad/s）。 */
     public double getTurretVelocity() {
-        return ticksToRadians(motor.getVelocity());
+        return encoderSign() * ticksToRadians(encoder.getVelocity());
     }
 
     /**
@@ -188,11 +189,6 @@ public class AutoAimSubsystem {
                 : Alliance.get().getAimPose();
     }
 
-    /** 最近一次读到的电池电压。 */
-    public double getBatteryVoltage() {
-        return batteryVoltage;
-    }
-
     // ---------------------------------------------------------------
     // 更新
     // ---------------------------------------------------------------
@@ -214,7 +210,7 @@ public class AutoAimSubsystem {
         long now = System.nanoTime();
         double dt = hasHistory ? Math.max((now - lastTimeNanos) / 1e9, 1e-3) : 0.0;
         lastTimeNanos = now;
-        updateBatteryVoltage(now);
+        applyServoDirections();
 
         Pose robot = poseSupplier.get();
         predictor.update(robot, velocitySupplier.get(), dt);
@@ -245,7 +241,8 @@ public class AutoAimSubsystem {
         double desired = fieldAngle - release.heading;
 
         double current = getTurretAngle();
-        measuredVelocity = getTurretVelocity();
+        filteredVelocity += AutoAimConfig.VEL_FILTER_ALPHA * (getTurretVelocity() - filteredVelocity);
+        measuredVelocity = filteredVelocity;
         targetAngle = TurretAimCalculator.chooseTurretAngle(
                 desired, current,
                 Math.toRadians(AutoAimConfig.MIN_ANGLE_DEG),
@@ -256,17 +253,18 @@ public class AutoAimSubsystem {
         // 云台相对角的变化率 = 视线角速度 − 底盘角速度。目标在死区里时不前馈，免得往限位上顶
         Pose presentPivot = pivotOf(present);
         double[] presentPivotVel = pivotVelocity(present, presentPivot);
+        // 底盘静止时，定位速度噪声会让前馈在 0 附近来回变号；软死区把这种噪声滤掉
         feedforwardVelocity = reachable
-                ? TurretAimCalculator.lineOfSightRate(
+                ? softDeadband(TurretAimCalculator.lineOfSightRate(
                         presentPivot.x(), presentPivot.y(),
                         presentPivotVel[0], presentPivotVel[1],
                         shot.virtualX, shot.virtualY)
-                - present.omega
+                - present.omega, AutoAimConfig.FF_DEADBAND)
                 : 0.0;
 
-        double positionVelocity = Math.abs(error) > Math.toRadians(AutoAimConfig.DEADBAND_DEG)
-                ? AutoAimConfig.KP_POS * error
-                : 0.0;
+        // 软死区：从死区边缘连续地长出来，不会在边缘处突然跳一个速度指令
+        double positionVelocity = AutoAimConfig.KP_POS
+                * softDeadband(error, Math.toRadians(AutoAimConfig.DEADBAND_DEG));
         velocityCommand = clip(positionVelocity + feedforwardVelocity,
                 -AutoAimConfig.MAX_TURRET_VEL, AutoAimConfig.MAX_TURRET_VEL);
 
@@ -276,17 +274,16 @@ public class AutoAimSubsystem {
         lastVelocityCommand = velocityCommand;
         hasHistory = true;
 
-        double staticFriction = Math.abs(velocityCommand) > AutoAimConfig.KS_MIN_VEL
-                ? Math.copySign(AutoAimConfig.kS, velocityCommand)
-                : 0.0;
+        // kS 随速度指令线性长出来（到 KS_RAMP_VEL 时满额），指令在 0 附近抖动时不会让功率来回跳 ±kS
+        double staticFriction = AutoAimConfig.kS
+                * clip(velocityCommand / AutoAimConfig.KS_RAMP_VEL, -1.0, 1.0);
         double rawPower = staticFriction
                 + AutoAimConfig.kV * velocityCommand
                 + AutoAimConfig.kA * filteredAccelCommand
                 + AutoAimConfig.KP_VEL * (velocityCommand - measuredVelocity);
-        rawPower *= AutoAimConfig.NOMINAL_VOLTAGE / batteryVoltage;
 
         power = applyLimits(clip(rawPower, -AutoAimConfig.MAX_POWER, AutoAimConfig.MAX_POWER), current);
-        motor.setPower(power);
+        setServoPower(power);
 
         tolerance = TurretAimCalculator.lockTolerance(
                 shot.distance,
@@ -308,6 +305,7 @@ public class AutoAimSubsystem {
         lastVelocityCommand = 0.0;
         filteredAccelCommand = 0.0;
         predictor.reset();
+        filteredVelocity = getTurretVelocity();
     }
 
     // ---------------------------------------------------------------
@@ -331,31 +329,35 @@ public class AutoAimSubsystem {
         };
     }
 
+    /** 软死区：|x| ≤ band 时为 0，之外减去 band，保持符号且连续。 */
+    private static double softDeadband(double x, double band) {
+        return Math.abs(x) <= band ? 0.0 : x - Math.copySign(band, x);
+    }
+
     private static double ticksToRadians(double ticks) {
-        return ticks / AutoAimConfig.TICKS_PER_TURRET_REV * 2.0 * Math.PI;
+        return ticks / AutoAimConfig.ticksPerTurretRev() * 2.0 * Math.PI;
     }
 
     // ---------------------------------------------------------------
-    // 电压
+    // 舵机 / 编码器
     // ---------------------------------------------------------------
 
-    private void updateBatteryVoltage(long nowNanos) {
-        if ((nowNanos - lastVoltageReadNanos) / 1e9 >= AutoAimConfig.VOLTAGE_READ_PERIOD) {
-            batteryVoltage = readBatteryVoltage();
-            lastVoltageReadNanos = nowNanos;
-        }
+    private static double encoderSign() {
+        return AutoAimConfig.ENCODER_REVERSED ? -1.0 : 1.0;
     }
 
-    /** 取所有电压传感器里的最大值；读不到时退回整定电压。下限 8V，防止补偿系数爆掉。 */
-    private double readBatteryVoltage() {
-        double max = 0.0;
-        for (VoltageSensor sensor : hardwareMap.voltageSensor) {
-            double v = sensor.getVoltage();
-            if (v > max) {
-                max = v;
-            }
+    /** 方向每圈重设，这样 Panels 里实时翻转 SERVO_REVERSED_x 立刻生效。 */
+    private void applyServoDirections() {
+        servos[0].setDirection(AutoAimConfig.SERVO_REVERSED_0
+                ? DcMotorSimple.Direction.REVERSE : DcMotorSimple.Direction.FORWARD);
+        servos[1].setDirection(AutoAimConfig.SERVO_REVERSED_1
+                ? DcMotorSimple.Direction.REVERSE : DcMotorSimple.Direction.FORWARD);
+    }
+
+    private void setServoPower(double p) {
+        for (CRServo servo : servos) {
+            servo.setPower(p);
         }
-        return Math.max(8.0, max > 0.0 ? max : AutoAimConfig.NOMINAL_VOLTAGE);
     }
 
     // ---------------------------------------------------------------
@@ -394,7 +396,6 @@ public class AutoAimSubsystem {
                 Math.toDegrees(measuredVelocity), Math.toDegrees(feedforwardVelocity));
         telemetry.addData("Turret Vel Cmd", "%.1f°/s", Math.toDegrees(velocityCommand));
         telemetry.addData("Turret Power", "%.3f", power);
-        telemetry.addData("Battery", "%.2f V", batteryVoltage);
         telemetry.addData("Chassis Speed", "%.1f in/s", predictor.speed());
         if (shot != null) {
             telemetry.addData("Shot Distance", "%.1f in", shot.distance);

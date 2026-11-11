@@ -22,9 +22,14 @@ public class ShooterSubsystem extends SubsystemBase {
     public static String NECTAR_SHOOTER_NAME = "NectarShooter";
     public static String POLLEN_SHOOTER_NAME = "PollenShooter";
 
-    public static double ACCELERATE_VEL = 800.0;
-    public static double IDLE_VEL = 400.0;
+    public static double ACCELERATE_VEL = 1640;
+    public static double IDLE_VEL = 600.0;
     public static double STOP_VEL = 0.0;
+
+    public static double setP = 34;
+    public static double setI = 0;
+    public static double setD = 0;
+    public static double setF = 16.5;
 
     private final DcMotorEx PollenShooter;
     private final DcMotorEx NectarShooter;
@@ -34,6 +39,8 @@ public class ShooterSubsystem extends SubsystemBase {
     public ShooterSubsystem(HardwareMap hardwareMap) {
         PollenShooter = hardwareMap.get(DcMotorEx.class, POLLEN_SHOOTER_NAME);
         NectarShooter = hardwareMap.get(DcMotorEx.class, NECTAR_SHOOTER_NAME);
+        PollenShooter.setVelocityPIDFCoefficients(setP, setI, setD, setF);
+
     }
 
     public void setState(State state) {
