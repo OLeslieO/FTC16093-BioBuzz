@@ -14,6 +14,8 @@ public class TransferSubsystem extends SubsystemBase {
         INTAKE,
         /** 空转。 */
         OUTAKE,
+        /** 射球时送球（右扳机开门时用）。 */
+        SHOOT,
         /** 停止。 */
         STOP
     }
@@ -23,6 +25,7 @@ public class TransferSubsystem extends SubsystemBase {
 
     public static double INTAKE_POW = 1;
     public static double OUTAKE_POW = -0.8;
+    public static double SHOOT_POW = 0.85;
     public static double STOP_POW = 0.0;
 
     private final DcMotorEx intake0, intake1;
@@ -64,6 +67,8 @@ public class TransferSubsystem extends SubsystemBase {
                 return INTAKE_POW;
             case OUTAKE:
                 return OUTAKE_POW;
+            case SHOOT:
+                return SHOOT_POW;
             case STOP:
                 return STOP_POW;
             default:

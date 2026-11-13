@@ -3,120 +3,133 @@ package org.firstinspires.ftc.teamcode.tests;
 import com.bylazar.configurables.annotations.Configurable;
 import com.bylazar.telemetry.PanelsTelemetry;
 import com.bylazar.telemetry.TelemetryManager;
+import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.util.ElapsedTime;
+import com.qualcomm.robotcore.util.Range;
 
+import java.util.List;
+
+/**
+ * 纯 PID 的 shooter 速度控制（无前馈），两个飞轮用平均速度、同一个输出。
+ *
+ * error  = (target - avgVelocity) / 20
+ * output = P·error + I·∫error·dt + D·dError/dt，限幅到 [-1, 1]
+ * 目标切换时积分和 lastError 清零。
+ *
+ * 参数都在 Panels 里实时调。
+ * 手柄：右扳机 = 目标速度 / 松开 = 空转速度；A = intake（transfer）；右肩键 = 开门。
+ */
 @TeleOp(name = "Test Shooter PID", group = "test")
 @Configurable
 public class ShooterPIDTest extends LinearOpMode {
-    private final TelemetryManager panelsTelemetry = PanelsTelemetry.INSTANCE.getTelemetry();
-    public static boolean isPIDControl = true;
-    public static double setP = 34;
-    public static double setI = 0;
-    public static double setD = 0;
-    public static double setF = 16.5;
-    public static double setShooterPower = 1;
-    public static boolean isPowerMode = false;
-    public static double setPreShooterPower = 1;
-    //  public static double shooterMinVelocity = 1400.0;
-    public static double shooterVelocity = 1640;
-    public static boolean isPollen = true;
+    public static double shooterTargetVelocity = 1920;
+    public static double shooterIdleVelocity = 1000;
+    public static double shooterP = 0.12;
+    public static double shooterI = 0.008;
+    public static double shooterD = 0.0;
+    public static double transferPower = 1.0;
 
+    private final TelemetryManager panelsTelemetry = PanelsTelemetry.INSTANCE.getTelemetry();
+
+    private double integral;
+    private double lastError;
+    private double lastTargetVelocity = Double.NaN;
 
     @Override
-    public void runOpMode() throws InterruptedException {
-        DcMotorEx shooterPollen = hardwareMap.get(DcMotorEx.class, "PollenShooter");
-        DcMotorEx shooterNectar = hardwareMap.get(DcMotorEx.class, "NectarShooter");
+    public void runOpMode() {
+        List<LynxModule> hubs = hardwareMap.getAll(LynxModule.class);
+        for (LynxModule hub : hubs) {
+            hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL);
+        }
+
+        DcMotorEx pollen = hardwareMap.get(DcMotorEx.class, "PollenShooter");
+        DcMotorEx nectar = hardwareMap.get(DcMotorEx.class, "NectarShooter");
         Servo pollenGate = hardwareMap.get(Servo.class, "pollenGate");
         Servo nectarGate = hardwareMap.get(Servo.class, "nectarGate");
-
-
-
         DcMotorEx intake = hardwareMap.get(DcMotorEx.class, "intake");
         DcMotorEx intake1 = hardwareMap.get(DcMotorEx.class, "intake1");
 
-
-        shooterPollen.setDirection(DcMotorSimple.Direction.REVERSE);
-        shooterNectar.setDirection(DcMotorSimple.Direction.REVERSE);
-
+        for (DcMotorEx m : new DcMotorEx[]{pollen, nectar}) {
+            m.setDirection(DcMotorSimple.Direction.REVERSE);
+            m.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+            m.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+            m.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        }
         intake.setDirection(DcMotorSimple.Direction.FORWARD);
         intake1.setDirection(DcMotorSimple.Direction.REVERSE);
 
-
-
-        shooterPollen.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.FLOAT);
-        shooterNectar.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.FLOAT);
-
-
-        shooterPollen.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        shooterPollen.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        shooterNectar.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        shooterNectar.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-
-
-        if (isPIDControl) {
-            shooterPollen.setVelocityPIDFCoefficients(setP, setI, setD, setF);
-            shooterNectar.setVelocityPIDFCoefficients(setP, setI, setD, setF);
-
-        }
-
+        telemetry.addLine("PID shooter test ready");
+        telemetry.update();
         waitForStart();
 
+        ElapsedTime loopTimer = new ElapsedTime();
+
         while (opModeIsActive()) {
-            if(isPollen){
-                shooterPollen.setVelocity(shooterVelocity);
+            for (LynxModule hub : hubs) hub.clearBulkCache();
 
-            }
-            else{
-                shooterNectar.setVelocity(shooterVelocity);
+            double targetVelocity = gamepad1.right_trigger > 0.5 ? shooterTargetVelocity : shooterIdleVelocity;
+            resetOnTargetChange(targetVelocity);
+            double pollenVelocity = pollen.getVelocity();
+            double nectarVelocity = nectar.getVelocity();
+            double currentVelocity = (pollenVelocity + nectarVelocity) / 2.0;
+            double dt = Math.max(loopTimer.seconds(), 0.001);
+            loopTimer.reset();
 
+            double error = (targetVelocity - currentVelocity) / 20;
+            integral += error * dt;
+            double derivative = (error - lastError) / dt;
+            lastError = error;
 
+            double output = shooterP * error
+                    + shooterI * integral
+                    + shooterD * derivative;
+            double power = Range.clip(output, -1.0, 1.0);
+            pollen.setPower(power);
+            nectar.setPower(power);
 
-            }
+            double intakePower = gamepad1.a ? transferPower : 0;
+            intake.setPower(intakePower);
+            intake1.setPower(intakePower);
 
-//      if (frontShooter.getVelocity() > shooterMinVelocity) {
-            if(gamepad1.a){
-
-                intake.setPower(1);
-                intake1.setPower(1);
-            }
-            else{
-
-                intake.setPower(0);
-                intake1.setPower(0);
-            }
-            if(gamepad1.right_bumper){
+            if (gamepad1.right_bumper) {
                 nectarGate.setPosition(0);
-                pollenGate.setPosition(0.9);
-            }else {
+                pollenGate.setPosition(0.5);
+            } else {
                 nectarGate.setPosition(0.33);
-                pollenGate.setPosition(0.74);
+                pollenGate.setPosition(0.8);
             }
 
-
-//      if (frontShooter.getVelocity() < shooterMinVelocity) {
-//        //            if(gamepad1.b){\
-//        preShooter.setPower(0);
-//        blender.setPower(0);
-//        intake.setPower(0);
-//      }
-//      }
-
-            // Panels Graph 只吃 telemetry 里的数值：目标和实际用同一个量纲（ticks/s）才能画在一起。
-            // 功率模式下没有目标转速，记 0。
-            double targetVelocity = isPowerMode ? 0.0 : shooterVelocity;
-            double pollenVelocity = shooterPollen.getVelocity();
-            panelsTelemetry.addData("Shooter Target Velocity", targetVelocity);
-            panelsTelemetry.addData("Shooter Pollen Velocity", pollenVelocity);
-            panelsTelemetry.addData("Shooter Velocity Error", targetVelocity - pollenVelocity);
-            panelsTelemetry.addData("Shooter Nectar Velocity", shooterNectar.getVelocity());
-
+            panelsTelemetry.addData("Target Velocity", targetVelocity);
+            panelsTelemetry.addData("Average Velocity", currentVelocity);
+            panelsTelemetry.addData("Pollen Velocity", pollenVelocity);
+            panelsTelemetry.addData("Nectar Velocity", nectarVelocity);
+            panelsTelemetry.addData("Error (scaled)", error);
+            panelsTelemetry.addData("Integral", integral);
+            panelsTelemetry.addData("Derivative", derivative);
+            panelsTelemetry.addData("Power", power);
+            panelsTelemetry.addData("Loop ms", dt * 1000);
             panelsTelemetry.update(telemetry);
-
         }
+
+        pollen.setPower(0);
+        nectar.setPower(0);
+        intake.setPower(0);
+        intake1.setPower(0);
+    }
+
+    private void resetOnTargetChange(double targetVelocity) {
+        if (targetVelocity == lastTargetVelocity) {
+            return;
+        }
+
+        integral = 0;
+        lastError = 0;
+        lastTargetVelocity = targetVelocity;
     }
 }

@@ -96,12 +96,18 @@ public enum Alliance {
 
     /** 本方云台瞄准点 X（Pedro 坐标系，英寸）。 */
     public double getAimX() {
-        return this == RED ? FieldConstants.RED_AIM_X : FieldConstants.BLUE_AIM_X;
+        if (this == BLUE) {
+            return FieldConstants.BLUE_AIM_X;
+        }
+        return FieldConstants.AIM_POINT_INDEX == 1 ? FieldConstants.RED_AIM_X_1 : FieldConstants.RED_AIM_X;
     }
 
     /** 本方云台瞄准点 Y（Pedro 坐标系，英寸）。 */
     public double getAimY() {
-        return this == RED ? FieldConstants.RED_AIM_Y : FieldConstants.BLUE_AIM_Y;
+        if (this == BLUE) {
+            return FieldConstants.BLUE_AIM_Y;
+        }
+        return FieldConstants.AIM_POINT_INDEX == 1 ? FieldConstants.RED_AIM_Y_1 : FieldConstants.RED_AIM_Y;
     }
 
     /**

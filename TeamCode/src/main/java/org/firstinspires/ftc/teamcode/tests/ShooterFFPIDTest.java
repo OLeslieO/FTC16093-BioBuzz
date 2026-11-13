@@ -131,10 +131,10 @@ public class ShooterFFPIDTest extends LinearOpMode {
 
             if (gamepad1.right_bumper) {
                 nectarGate.setPosition(0);
-                pollenGate.setPosition(0.9);
+                pollenGate.setPosition(0.5);
             } else {
                 nectarGate.setPosition(0.33);
-                pollenGate.setPosition(0.74);
+                pollenGate.setPosition(0.8);
             }
 
             panelsTelemetry.addData("Shooter Select", shooterSelect == 0 ? "pollen" : shooterSelect == 1 ? "nectar" : "both");

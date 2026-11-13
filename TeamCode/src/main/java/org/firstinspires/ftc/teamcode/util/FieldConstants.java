@@ -23,9 +23,22 @@ public class FieldConstants {
     public static double BLUE_AIM_X = 84.0;
     public static double BLUE_AIM_Y = 70.75;
 
-    // 红方云台瞄准点（Pedro 坐标系实测）
+    // 红方云台瞄准点（Pedro 坐标系实测），两个可切换：0 号为默认
     public static double RED_AIM_X = 59.0;
-    public static double RED_AIM_Y = 70.75;
+    public static double RED_AIM_Y = 59.0;
+    public static double RED_AIM_X_1 = 59.0;
+    public static double RED_AIM_Y_1 = 82.5;
+
+    /**
+     * 当前用哪个红方瞄准点：0 = (RED_AIM_X, RED_AIM_Y)，1 = (RED_AIM_X_1, RED_AIM_Y_1)。
+     * 用 {@link #toggleAimPoint()} 切换；Panels 里也能直接改。
+     */
+    public static int AIM_POINT_INDEX = 0;
+
+    /** 在两个瞄准点之间切换。 */
+    public static void toggleAimPoint() {
+        AIM_POINT_INDEX = AIM_POINT_INDEX == 0 ? 1 : 0;
+    }
 
     private FieldConstants() {
     }

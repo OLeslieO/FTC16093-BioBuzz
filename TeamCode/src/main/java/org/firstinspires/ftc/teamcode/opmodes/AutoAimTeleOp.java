@@ -7,6 +7,7 @@ import com.pedropathing.follower.Follower;
 import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.seattlesolvers.solverslib.command.InstantCommand;
+import com.seattlesolvers.solverslib.command.ParallelCommandGroup;
 import com.seattlesolvers.solverslib.command.StartEndCommand;
 import com.seattlesolvers.solverslib.command.button.Trigger;
 import com.seattlesolvers.solverslib.gamepad.GamepadEx;
@@ -16,13 +17,17 @@ import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.command.IntakeCommand;
 import org.firstinspires.ftc.teamcode.command.TransferCommand;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
-import org.firstinspires.ftc.teamcode.subsystem.GateSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.NectarGateSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.IntakeSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.PPDriveSubsystem;
-import org.firstinspires.ftc.teamcode.subsystem.ShooterSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.PollenGateSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.PollenShooterSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.NectarShooterSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.TransferSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.autoaim.AutoAimConfig;
 import org.firstinspires.ftc.teamcode.subsystem.autoaim.AutoAimSubsystem;
 import org.firstinspires.ftc.teamcode.util.Alliance;
+import org.firstinspires.ftc.teamcode.util.FieldConstants;
 
 /**
  * DriveTeleOp 的复制版 + 云台自动瞄准。
@@ -39,10 +44,12 @@ import org.firstinspires.ftc.teamcode.util.Alliance;
  *   <li>左摇杆平移，右摇杆左右转向；按住 dpad 左键慢速</li>
  *   <li>Intake：A 伸出，B 中间，X 收回</li>
  *   <li>Transfer：按住右肩键 intake，按住左肩键 outake</li>
- *   <li>Nectar gate：右扳机按下打开，松开关闭</li>
- *   <li>Nectar shooter：默认一直 ACCELERATE</li>
+ *   <li>Nectar gate：右扳机按下打开，同时 intake 以 0.85 功率送球；松开关门、intake 停</li>
+ *   <li>Pollen gate：左扳机按下打开，同时 intake 送球；松开关门、intake 停</li>
+ *   <li>Nectar / Pollen shooter：默认一直 ACCELERATE，射速都按距离查表</li>
  *   <li>自动瞄准：开局自动打开；dpad 上 开 / 关，Y 开 / 关边走边射</li>
- *   <li>dpad 下：把位姿重置回起点（车要先摆回起点）</li>
+ *   <li>dpad 下：切换瞄准用的云台几何参数（Nectar / Pollen 旋转轴偏移，开局默认 Nectar）</li>
+ *   <li>dpad 右：切换瞄准点（红方 (59, 59) / (59, 82.5)，开局默认前者）</li>
  * </ul>
  */
 @TeleOp(name = "AutoAim TeleOp", group = "main")
@@ -59,8 +66,8 @@ public class AutoAimTeleOp extends CommandOpModeEx {
     public static double BRAKE_STICK_THRESHOLD = 0.05;
 
     /** 没有自动阶段传过来的位姿时用的起点。 */
-    public static double START_X = 56.0;
-    public static double START_Y = 8.0;
+    public static double START_X = 55.64;
+    public static double START_Y = 7.677;
     public static double START_HEADING_DEG = 90.0;
 
     /** 开局是否自动打开自动瞄准。 */
@@ -69,16 +76,22 @@ public class AutoAimTeleOp extends CommandOpModeEx {
     private Follower follower;
     private PPDriveSubsystem drive;
     private AutoAimSubsystem aim;
-    private IntakeSubsystem intake;
     private TransferSubsystem transfer;
-    private GateSubsystem gate;
-    private ShooterSubsystem shooter;
+    private NectarGateSubsystem nectarGate;
+    private PollenGateSubsystem pollenGate;
+    private NectarShooterSubsystem nectarShooter;
+    private PollenShooterSubsystem pollenShooter;
+
+    private IntakeSubsystem intake;
     private GamepadEx driver;
     private Telemetry out;
 
     @Override
     public void initialize() {
         out = new JoinedTelemetry(PanelsTelemetry.INSTANCE.getFtcTelemetry(), telemetry);
+
+        FieldConstants.AIM_POINT_INDEX = 0; // 开局默认瞄 0 号点
+        AutoAimConfig.ACTIVE_TURRET = AutoAimConfig.Turret.NECTAR; // 开局默认用 nectar 云台参数
 
         if (!Alliance.isSet()) {
             Alliance.set(Alliance.DEFAULT);
@@ -95,12 +108,22 @@ public class AutoAimTeleOp extends CommandOpModeEx {
         // 从自动阶段接过来时云台编码器沿用自动阶段的读数，不清零
         aim = new AutoAimSubsystem(hardwareMap, out, drive::getPose, drive::getVelocity, !fromAuto);
 
-        intake = new IntakeSubsystem(hardwareMap);
         transfer = new TransferSubsystem(hardwareMap);
-        gate = new GateSubsystem(hardwareMap);
-        shooter = new ShooterSubsystem(hardwareMap);
-        shooter.accelerate();
-        register(intake, transfer, gate, shooter);
+        nectarGate = new NectarGateSubsystem(hardwareMap);
+        pollenGate = new PollenGateSubsystem(hardwareMap);
+        nectarShooter = new NectarShooterSubsystem(hardwareMap);
+        pollenShooter = new PollenShooterSubsystem(hardwareMap);
+        intake = new IntakeSubsystem(hardwareMap);
+        nectarShooter.accelerate();
+        // 射速按距离查表：自瞄开着用解算出的射击距离（边走边射时已含提前量），否则用到瞄准点的直线距离
+        nectarShooter.setDistanceSupplier(() -> aim.isEnabled() && aim.getShotDistance() > 0
+                ? aim.getShotDistance()
+                : Alliance.get().distanceToAim(drive.getPose()));
+        pollenShooter.accelerate();
+        pollenShooter.setDistanceSupplier(() -> aim.isEnabled() && aim.getShotDistance() > 0
+                ? aim.getShotDistance()
+                : Alliance.get().distanceToAim(drive.getPose()));
+        register(transfer, nectarGate, pollenGate, nectarShooter, pollenShooter, intake);
 
         driver = new GamepadEx(gamepad1);
     }
@@ -120,23 +143,24 @@ public class AutoAimTeleOp extends CommandOpModeEx {
 
     @Override
     public void functionalButtons() {
-        driver.getGamepadButton(GamepadKeys.Button.A)
-                .whenPressed(new IntakeCommand(intake, IntakeSubsystem.State.EXTENDED));
-        driver.getGamepadButton(GamepadKeys.Button.B)
-                .whenPressed(new IntakeCommand(intake, IntakeSubsystem.State.MIDDLE));
-        driver.getGamepadButton(GamepadKeys.Button.X)
-                .whenPressed(new IntakeCommand(intake, IntakeSubsystem.State.RETRACTED));
 
         driver.getGamepadButton(GamepadKeys.Button.RIGHT_BUMPER)
                 .whileHeld(new TransferCommand(transfer, TransferSubsystem.State.INTAKE));
         driver.getGamepadButton(GamepadKeys.Button.LEFT_BUMPER)
                 .whileHeld(new TransferCommand(transfer, TransferSubsystem.State.OUTAKE));
 
-        // 右扳机按下开门，松开关门
+        // 右扳机按下开门 + intake 以 TransferSubsystem.SHOOT_POW 送球，松开关门、intake 停
         new Trigger(() -> gamepad1.right_trigger > GATE_TRIGGER_THRESHOLD)
-                .whileActiveOnce(new StartEndCommand(gate::shoot, gate::stop, gate));
+                .whileActiveOnce(new ParallelCommandGroup(
+                        new StartEndCommand(nectarGate::shoot, nectarGate::stop, nectarGate),
+                        new TransferCommand(transfer, TransferSubsystem.State.SHOOT)));
+        new Trigger(() -> gamepad1.left_trigger > GATE_TRIGGER_THRESHOLD)
+                .whileActiveOnce(new ParallelCommandGroup(
+                        new StartEndCommand(pollenGate::shoot, pollenGate::stop, pollenGate),
+                        new TransferCommand(transfer, TransferSubsystem.State.SHOOT)));
 
-        // 自动瞄准开关 / 边走边射开关 / 重置位姿
+
+        // 自动瞄准开关 / 边走边射开关 / 切换云台参数 / 切换瞄准点
         driver.getGamepadButton(GamepadKeys.Button.DPAD_UP)
                 .whenPressed(new InstantCommand(() -> {
                     if (aim.isEnabled()) {
@@ -148,7 +172,16 @@ public class AutoAimTeleOp extends CommandOpModeEx {
         driver.getGamepadButton(GamepadKeys.Button.Y)
                 .whenPressed(new InstantCommand(() -> aim.setShootOnTheMove(!aim.isShootOnTheMove())));
         driver.getGamepadButton(GamepadKeys.Button.DPAD_DOWN)
-                .whenPressed(new InstantCommand(() -> drive.setPose(startPose())));
+                .whenPressed(new InstantCommand(AutoAimConfig::toggleTurret));
+        driver.getGamepadButton(GamepadKeys.Button.DPAD_RIGHT)
+                .whenPressed(new InstantCommand(FieldConstants::toggleAimPoint));
+
+        driver.getGamepadButton(GamepadKeys.Button.A)
+                .whenPressed(new IntakeCommand(intake, IntakeSubsystem.State.EXTENDED));
+        driver.getGamepadButton(GamepadKeys.Button.B)
+                .whenPressed(new IntakeCommand(intake, IntakeSubsystem.State.MIDDLE));
+        driver.getGamepadButton(GamepadKeys.Button.X)
+                .whenPressed(new IntakeCommand(intake, IntakeSubsystem.State.RETRACTED));
     }
 
     @Override
@@ -179,16 +212,18 @@ public class AutoAimTeleOp extends CommandOpModeEx {
         drive.update();
         aim.update();
 
-        out.addData("transfer state", transfer.getState());
-        out.addData("gate state", gate.getState());
-        out.addData("shooter state", shooter.getState());
-        out.addData("shooter target", shooter.getTargetVelocity());
-        out.addData("shooter velocity", shooter.getVelocity());
-        out.addData("shooter error", shooter.getError());
-        out.addData("shooter ready", shooter.isReady());
+        out.addData("nectar target", nectarShooter.getTargetVelocity());
+        out.addData("shooter velocity", nectarShooter.getVelocity());
+        out.addData("shooter error", nectarShooter.getError());
+        out.addData("pollen target", pollenShooter.getTargetVelocity());
+        out.addData("pollen table distance", "%.1f in", pollenShooter.getDistance());
+        out.addData("pollen velocity", pollenShooter.getVelocity());
+        out.addData("pollen error", pollenShooter.getError());
+        out.addData("aim turret", AutoAimConfig.ACTIVE_TURRET);
         out.addData("aim enabled", aim.isEnabled());
         out.addData("aim shoot on the move", aim.isShootOnTheMove());
-        out.addData("aim locked", aim.isLocked());
+        out.addData("aim point", "#%d (%.1f, %.1f)", FieldConstants.AIM_POINT_INDEX,
+                Alliance.get().getAimX(), Alliance.get().getAimY());
         out.addData("distance to aim", "%.1f in", Alliance.get().distanceToAim(drive.getPose()));
         out.update();
     }

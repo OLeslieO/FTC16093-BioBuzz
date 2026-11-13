@@ -61,11 +61,41 @@ public class AutoAimConfig {
     // 几何
     // ---------------------------------------------------------------
 
-    /** 云台旋转轴相对机器人中心（Pedro 定位点）的偏移，英寸。前为正。 */
-    public static double PIVOT_OFFSET_FORWARD_IN = 0.0;
+    /** 按哪个云台的旋转轴位置来解算瞄准。 */
+    public enum Turret {
+        NECTAR,
+        POLLEN
+    }
 
-    /** 云台旋转轴相对机器人中心的偏移，英寸。左为正。 */
-    public static double PIVOT_OFFSET_LEFT_IN = 0.0;
+    /** 当前用哪个云台的几何参数瞄准；TeleOp 里 dpad 下切换，Panels 里也能直接改。 */
+    public static Turret ACTIVE_TURRET = Turret.NECTAR;
+
+    /** Nectar 云台旋转轴相对机器人中心（Pedro 定位点）的偏移，英寸。前为正。 */
+    public static double NECTAR_PIVOT_OFFSET_FORWARD_IN = -1.033;
+
+    /** Nectar 云台旋转轴相对机器人中心的偏移，英寸。左为正。 */
+    public static double NECTAR_PIVOT_OFFSET_LEFT_IN = -2.44;
+
+    /** Pollen 云台旋转轴相对机器人中心（Pedro 定位点）的偏移，英寸。前为正。 */
+    public static double POLLEN_PIVOT_OFFSET_FORWARD_IN = 2.75591;
+
+    /** Pollen 云台旋转轴相对机器人中心的偏移，英寸。左为正。 */
+    public static double POLLEN_PIVOT_OFFSET_LEFT_IN = 4.72441;
+
+    /** 当前云台旋转轴的前向偏移（英寸）。 */
+    public static double pivotOffsetForwardIn() {
+        return ACTIVE_TURRET == Turret.POLLEN ? POLLEN_PIVOT_OFFSET_FORWARD_IN : NECTAR_PIVOT_OFFSET_FORWARD_IN;
+    }
+
+    /** 当前云台旋转轴的左向偏移（英寸）。 */
+    public static double pivotOffsetLeftIn() {
+        return ACTIVE_TURRET == Turret.POLLEN ? POLLEN_PIVOT_OFFSET_LEFT_IN : NECTAR_PIVOT_OFFSET_LEFT_IN;
+    }
+
+    /** 在 Nectar / Pollen 两套几何参数之间切换。 */
+    public static void toggleTurret() {
+        ACTIVE_TURRET = ACTIVE_TURRET == Turret.NECTAR ? Turret.POLLEN : Turret.NECTAR;
+    }
 
     /** 固定的瞄准角修正（度），用来抵消机械 / 安装造成的系统性偏差。逆时针为正。 */
     public static double YAW_TRIM_DEG = 0.0;

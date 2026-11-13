@@ -13,6 +13,7 @@ import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.subsystem.PPDriveSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.autoaim.AutoAimSubsystem;
 import org.firstinspires.ftc.teamcode.util.Alliance;
+import org.firstinspires.ftc.teamcode.util.FieldConstants;
 
 /**
  * 云台自动瞄准测试（红方）。
@@ -26,6 +27,7 @@ import org.firstinspires.ftc.teamcode.util.Alliance;
  *   <li>A：开 / 关自动瞄准</li>
  *   <li>Y：开 / 关边走边射</li>
  *   <li>X：把位姿重置回起点（车要先摆回起点）</li>
+ *   <li>dpad 左：在两个瞄准点 (59, 59) / (59, 82.5) 之间切换</li>
  * </ul>
  *
  * <p>telemetry 同时发到 Driver Station 和 Panels。
@@ -48,6 +50,7 @@ public class AutoAimTest extends LinearOpMode {
         Telemetry out = new JoinedTelemetry(PanelsTelemetry.INSTANCE.getFtcTelemetry(), telemetry);
 
         Alliance.set(Alliance.RED);
+        FieldConstants.AIM_POINT_INDEX = 0; // 默认瞄 (59, 59)
 
         Follower follower = Constants.create(hardwareMap);
         PPDriveSubsystem drive = new PPDriveSubsystem(follower, out);
@@ -78,6 +81,7 @@ public class AutoAimTest extends LinearOpMode {
         boolean lastA = false;
         boolean lastY = false;
         boolean lastX = false;
+        boolean lastDpadLeft = false;
 
         try {
             while (opModeIsActive()) {
@@ -95,6 +99,10 @@ public class AutoAimTest extends LinearOpMode {
                 if (gamepad1.x && !lastX) {
                     drive.setPose(startPose());
                 }
+                if (gamepad1.dpad_left && !lastDpadLeft) {
+                    FieldConstants.toggleAimPoint();
+                }
+                lastDpadLeft = gamepad1.dpad_left;
                 lastA = gamepad1.dpad_up;
                 lastY = gamepad1.y;
                 lastX = gamepad1.x;
@@ -114,6 +122,8 @@ public class AutoAimTest extends LinearOpMode {
                 drive.update();
                 aim.update();
 
+                out.addData("Aim Point", "#%d (%.1f, %.1f)", FieldConstants.AIM_POINT_INDEX,
+                        Alliance.get().getAimX(), Alliance.get().getAimY());
                 out.addData("Distance To Aim", "%.1f in", Alliance.get().distanceToAim(drive.getPose()));
                 out.update();
             }

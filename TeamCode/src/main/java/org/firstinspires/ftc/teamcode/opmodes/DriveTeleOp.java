@@ -14,8 +14,9 @@ import org.firstinspires.ftc.teamcode.command.IntakeCommand;
 import org.firstinspires.ftc.teamcode.command.TransferCommand;
 import org.firstinspires.ftc.teamcode.subsystem.DriveSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.IntakeSubsystem;
-import org.firstinspires.ftc.teamcode.subsystem.GateSubsystem;
-import org.firstinspires.ftc.teamcode.subsystem.ShooterSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.NectarGateSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.PollenGateSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.NectarShooterSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.TransferSubsystem;
 
 /**
@@ -25,6 +26,7 @@ import org.firstinspires.ftc.teamcode.subsystem.TransferSubsystem;
  * <p>Intake：A 伸出，B 中间，X 收回。
  * <p>Transfer：按住右肩键 intake，按住左肩键 outake，松开停止。
  * <p>Nectar gate：右扳机按下打开（SHOOT），松开关闭（STOP）。
+ * <p>Pollen gate：左扳机按下打开（SHOOT），松开关闭（STOP）。
  * <p>Nectar shooter：默认一直 ACCELERATE（前馈 + PID 自己控速）。
  */
 @TeleOp(name = "Drive TeleOp", group = "main")
@@ -34,13 +36,12 @@ public class DriveTeleOp extends CommandOpModeEx {
     /** 慢速模式下的功率系数。 */
     public static double SLOW_SCALE = 0.35;
 
-    /** 右扳机超过这个值就打开 nectar gate。 */
-
     private DriveSubsystem drive;
     private IntakeSubsystem intake;
     private TransferSubsystem transfer;
-    private GateSubsystem gate;
-    private ShooterSubsystem shooter;
+    private NectarGateSubsystem nectarGate;
+    private PollenGateSubsystem pollenGate;
+    private NectarShooterSubsystem shooter;
     private GamepadEx driver;
     private TelemetryManager panelsTelemetry;
 
@@ -51,10 +52,11 @@ public class DriveTeleOp extends CommandOpModeEx {
         drive = new DriveSubsystem(hardwareMap);
         intake = new IntakeSubsystem(hardwareMap);
         transfer = new TransferSubsystem(hardwareMap);
-        gate = new GateSubsystem(hardwareMap);
-        shooter = new ShooterSubsystem(hardwareMap);
+        nectarGate = new NectarGateSubsystem(hardwareMap);
+        pollenGate = new PollenGateSubsystem(hardwareMap);
+        shooter = new NectarShooterSubsystem(hardwareMap);
         shooter.accelerate();
-        register(drive, intake, transfer, gate, shooter);
+        register(drive, intake, transfer, nectarGate, pollenGate, shooter);
 
         driver = new GamepadEx(gamepad1);
 
@@ -82,9 +84,12 @@ public class DriveTeleOp extends CommandOpModeEx {
         driver.getGamepadButton(GamepadKeys.Button.LEFT_BUMPER)
                 .whileHeld(new TransferCommand(transfer, TransferSubsystem.State.OUTAKE));
 
-        // 右扳机按下开门，松开关门
+        // 右扳机按下开 nectar 门，松开关门
         new Trigger(() -> gamepad1.right_trigger > 0.5)
-                .whileActiveOnce(new StartEndCommand(gate::shoot, gate::stop, gate));
+                .whileActiveOnce(new StartEndCommand(nectarGate::shoot, nectarGate::stop, nectarGate));
+        // 左扳机按下开 pollen 门，松开关门
+        new Trigger(() -> gamepad1.left_trigger > 0.5)
+                .whileActiveOnce(new StartEndCommand(pollenGate::shoot, pollenGate::stop, pollenGate));
     }
 
     @Override
@@ -96,7 +101,8 @@ public class DriveTeleOp extends CommandOpModeEx {
         super.run();
 
         panelsTelemetry.addData("transfer state", transfer.getState());
-        panelsTelemetry.addData("gate state", gate.getState());
+        panelsTelemetry.addData("nectar gate state", nectarGate.getState());
+        panelsTelemetry.addData("pollen gate state", pollenGate.getState());
         panelsTelemetry.addData("shooter state", shooter.getState());
         panelsTelemetry.addData("shooter target", shooter.getTargetVelocity());
         panelsTelemetry.addData("shooter velocity", shooter.getVelocity());

@@ -315,8 +315,8 @@ public class AutoAimSubsystem {
     private static Pose pivotOf(ChassisMotionPredictor.Prediction state) {
         return TurretAimCalculator.pivotPose(
                 new Pose(state.x, state.y, state.heading),
-                AutoAimConfig.PIVOT_OFFSET_FORWARD_IN,
-                AutoAimConfig.PIVOT_OFFSET_LEFT_IN);
+                AutoAimConfig.pivotOffsetForwardIn(),
+                AutoAimConfig.pivotOffsetLeftIn());
     }
 
     /** 旋转轴的场地速度 = 底盘速度 + ω × 偏移（偏移不在中心时，原地转也会让旋转轴移动）。 */
@@ -342,8 +342,14 @@ public class AutoAimSubsystem {
     // 舵机 / 编码器
     // ---------------------------------------------------------------
 
-    private static double encoderSign() {
-        return AutoAimConfig.ENCODER_REVERSED ? -1.0 : 1.0;
+    /**
+     * 编码器读数符号。Through Bore 和 transfer 电机共用 intake1 端口，
+     * TransferSubsystem 会把这个电机设成 REVERSE，SDK 会连编码器读数一起取反，
+     * 所以这里把电机方向抵消掉，只认 ENCODER_REVERSED。
+     */
+    private double encoderSign() {
+        double motorDirSign = encoder.getDirection() == DcMotorSimple.Direction.REVERSE ? -1.0 : 1.0;
+        return (AutoAimConfig.ENCODER_REVERSED ? -1.0 : 1.0) * motorDirSign;
     }
 
     /** 方向每圈重设，这样 Panels 里实时翻转 SERVO_REVERSED_x 立刻生效。 */
