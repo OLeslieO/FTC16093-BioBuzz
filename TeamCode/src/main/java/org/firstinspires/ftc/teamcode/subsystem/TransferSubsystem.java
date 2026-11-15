@@ -17,20 +17,23 @@ public class TransferSubsystem extends SubsystemBase {
         /** 射球时送球（右扳机开门时用）。 */
         SHOOT,
         /** 停止。 */
-        STOP
+        STOP,
+        /** 自定义功率，见 {@link #setPower(double)}。 */
+        CUSTOM
     }
 
     public static String INTAKE_MOTOR_NAME_0 = "intake";
     public static String INTAKE_MOTOR_NAME_1 = "intake1";
 
     public static double INTAKE_POW = 1;
-    public static double OUTAKE_POW = -0.8;
+    public static double OUTAKE_POW = -0.9;
     public static double SHOOT_POW = 0.85;
     public static double STOP_POW = 0.0;
 
     private final DcMotorEx intake0, intake1;
 
     private State state = State.STOP;
+    private double customPower = 0.0;
 
     public TransferSubsystem(HardwareMap hardwareMap) {
         intake0 = hardwareMap.get(DcMotorEx.class, INTAKE_MOTOR_NAME_0);
@@ -60,6 +63,12 @@ public class TransferSubsystem extends SubsystemBase {
         setState(State.STOP);
     }
 
+    /** 直接指定功率（切到 CUSTOM 档）。 */
+    public void setPower(double power) {
+        customPower = power;
+        setState(State.CUSTOM);
+    }
+
     /** 当前档位对应的shooter速度 */
     public double getTargetPower() {
         switch (state) {
@@ -71,6 +80,8 @@ public class TransferSubsystem extends SubsystemBase {
                 return SHOOT_POW;
             case STOP:
                 return STOP_POW;
+            case CUSTOM:
+                return customPower;
             default:
                 return STOP_POW;
         }

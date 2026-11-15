@@ -31,19 +31,19 @@ import java.util.List;
 @Configurable
 public class ShooterPIDFTest extends LinearOpMode {
     // ticks/s
-    public static double SHOOT_VEL = 1700;
+    public static double SHOOT_VEL = 1840;
     public static double IDLE_VEL = 1000;
     // 0 = pollen, 1 = nectar, 2 = both
     public static int shooterSelect = 0;
     // true = 自己算功率；false = Hub 自带速度控制
     public static boolean USE_PID = true;
     // 功率 / (ticks/s) 误差
-    public static double VELOCITY_P = 0.0036;
+    public static double VELOCITY_P = 0.006;
     public static double VELOCITY_I = 0;
     public static double VELOCITY_D = 0;
     // 前馈 = VELOCITY_F × 目标 ticks/s，起点 ≈ 1 / 满功率速度
     public static boolean USE_F = true;
-    public static double VELOCITY_F = 0.00052;
+    public static double VELOCITY_F = 0.00049;
     public static double AT_SPEED_TOLERANCE = 60;
     public static double READY_TO_SHOOT_TOLERANCE = 60;
 
@@ -88,7 +88,7 @@ public class ShooterPIDFTest extends LinearOpMode {
             pollen.periodic();
             nectar.periodic();
 
-            double intakePower = gamepad1.a ? 1 : 0;
+            double intakePower = gamepad1.a ? 0.9 : 0;
             intake.setPower(intakePower);
             intake1.setPower(intakePower);
 

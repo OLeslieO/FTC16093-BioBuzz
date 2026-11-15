@@ -36,7 +36,7 @@ public class PollenShooterSubsystem extends SubsystemBase {
     public static String POLLEN_SHOOTER_NAME = "PollenShooter";
 
     // ---------- 目标（ticks/s） ----------
-    public static double ACCELERATE_VEL = 1700;
+    public static double ACCELERATE_VEL = 1540;
     public static double IDLE_VEL = 600.0;
     public static double STOP_VEL = 0.0;
 
@@ -45,29 +45,30 @@ public class PollenShooterSubsystem extends SubsystemBase {
     public static boolean USE_DISTANCE_TABLE = true;
     /**
      * 距离（英寸，云台旋转轴到瞄准点 / 边走边射时的虚拟目标，必须递增）-> 射速（ticks/s）。
-     * 实测：x = 55.64，y = 20 -> 1700；x = 55.64，y = 7.677 -> 1860。
-     * 距离按默认红方瞄准点 (RED_AIM_X, RED_AIM_Y) = (59, 59) 算：
-     * √(3.36² + 39²) ≈ 39.14，√(3.36² + 51.32²) ≈ 51.43。换了瞄准点要重算。
+     * 实测（机器人坐标 -> 射速）：
+     *   (55.67, 27.72) -> 1480，(59.49, 22.56) -> 1520，(55.91, 13.39) -> 1540，(55.64, 7.677) -> 1640。
+     * 距离 = 机器人中心到默认红方瞄准点 (RED_AIM_X, RED_AIM_Y) = (59, 57)：
+     *   29.47，34.44，43.72，49.44。换了瞄准点要重算。
      * 新测的点按距离从小到大插进去，两个数组长度要一样。
      */
-    public static double[] SHOT_DIST_IN = {39.14, 51.43};
-    public static double[] SHOT_VEL = {1700.0, 1860.0};
+    public static double[] SHOT_DIST_IN = {29.47, 34.44, 43.72, 49.44};
+    public static double[] SHOT_VEL = {1500.0, 1540.0, 1560.0, 1660.0};
     /** 超出表的范围时，是否沿两端那一段的斜率外推（否则取端点值）。 */
     public static boolean EXTRAPOLATE = true;
     /** 查表结果的上下限（ticks/s），防止外推太离谱。 */
-    public static double MIN_SHOT_VEL = 1660.0;
-    public static double MAX_SHOT_VEL = 2040.0;
+    public static double MIN_SHOT_VEL = 1440.0;
+    public static double MAX_SHOT_VEL = 1800.0;
 
     // ---------- 控制器 ----------
     /** true = 自己算功率；false = Hub 自带速度控制。 */
     public static boolean USE_PID = true;
     /** 功率 / (ticks/s) 误差。 */
-    public static double VELOCITY_P = 0.0037;
+    public static double VELOCITY_P = 0.0038;
     public static double VELOCITY_I = 0;
     public static double VELOCITY_D = 0;
     /** 前馈 = VELOCITY_F × 目标 ticks/s，起点 ≈ 1 / 满功率速度。 */
     public static boolean USE_F = true;
-    public static double VELOCITY_F = 0.00055;
+    public static double VELOCITY_F = 0.00051;
     /**
      * 按距离查表时目标每个循环都在小幅变化，只有换档或目标跳变超过这个值（ticks/s）
      * 才重置控制器，否则积分和 D 永远起不来。

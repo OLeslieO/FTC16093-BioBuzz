@@ -36,7 +36,7 @@ public class NectarShooterSubsystem extends SubsystemBase {
     public static String NECTAR_SHOOTER_NAME = "NectarShooter";
 
     // ---------- 目标（ticks/s） ----------
-    public static double ACCELERATE_VEL = 1920;
+    public static double ACCELERATE_VEL = 1840;
     public static double IDLE_VEL = 600.0;
     public static double STOP_VEL = 0.0;
 
@@ -45,27 +45,30 @@ public class NectarShooterSubsystem extends SubsystemBase {
     public static boolean USE_DISTANCE_TABLE = true;
     /**
      * 距离（英寸，云台旋转轴到瞄准点 / 边走边射时的虚拟目标，必须递增）-> 射速（ticks/s）。
-     * 实测：正对球门，y = 24 -> 1920，y = 8 -> 2000；瞄准点 y = 70.75，所以距离 = 70.75 - y。
+     * 实测（机器人坐标 -> 射速）：
+     *   (55.67, 27.72) -> 1700，(55.43, 23.98) -> 1840，(55.71, 13.71) -> 1940。
+     * 距离 = 机器人中心到默认红方瞄准点 (RED_AIM_X, RED_AIM_Y) = (59, 57)：
+     *   29.47，33.21，43.41。换了瞄准点要重算。
      * 新测的点按距离从小到大插进去，两个数组长度要一样。
      */
-    public static double[] SHOT_DIST_IN = {46.75, 62.75};
-    public static double[] SHOT_VEL = {1920.0, 2020};
+    public static double[] SHOT_DIST_IN = {29.47, 33.21, 43.41};
+    public static double[] SHOT_VEL = {1700.0, 1840.0, 1940.0};
     /** 超出表的范围时，是否沿两端那一段的斜率外推（否则取端点值）。 */
     public static boolean EXTRAPOLATE = true;
     /** 查表结果的上下限（ticks/s），防止外推太离谱。 */
-    public static double MIN_SHOT_VEL = 1880.0;
-    public static double MAX_SHOT_VEL = 2200.0;
+    public static double MIN_SHOT_VEL = 1660.0;
+    public static double MAX_SHOT_VEL = 2100.0;
 
     // ---------- 控制器 ----------
     /** true = 自己算功率；false = Hub 自带速度控制。 */
     public static boolean USE_PID = true;
     /** 功率 / (ticks/s) 误差。 */
-    public static double VELOCITY_P = 0.004;
+    public static double VELOCITY_P = 0.0049;
     public static double VELOCITY_I = 0;
     public static double VELOCITY_D = 0;
     /** 前馈 = VELOCITY_F × 目标 ticks/s，起点 ≈ 1 / 满功率速度。 */
     public static boolean USE_F = true;
-    public static double VELOCITY_F = 0.00036;
+    public static double VELOCITY_F = 0.00046;
     /**
      * 按距离查表时目标每个循环都在小幅变化，只有换档或目标跳变超过这个值（ticks/s）
      * 才重置控制器，否则积分和 D 永远起不来。

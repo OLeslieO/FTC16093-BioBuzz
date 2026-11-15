@@ -2,6 +2,7 @@ package org.firstinspires.ftc.teamcode.opmodes;
 
 import static com.pedropathing.ivy.commands.Commands.instant;
 import static com.pedropathing.ivy.commands.Commands.waitMs;
+import static com.pedropathing.ivy.commands.Commands.waitUntil;
 import static com.pedropathing.ivy.groups.Groups.sequential;
 
 import com.bylazar.telemetry.JoinedTelemetry;
@@ -21,9 +22,12 @@ import org.firstinspires.ftc.teamcode.subsystem.IntakeSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.PPDriveSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.PollenGateSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.NectarShooterSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.PollenShooterSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.TransferSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.autoaim.AutoAimConfig;
 import org.firstinspires.ftc.teamcode.subsystem.autoaim.AutoAimSubsystem;
 import org.firstinspires.ftc.teamcode.util.Alliance;
+import org.firstinspires.ftc.teamcode.util.FieldConstants;
 
 /**
  * 所有自动程序的基类（参考 FTC2026-16093National 的 AutoCommandBase）。
@@ -48,7 +52,7 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
     protected TelemetryManager panelsTelemetry;
     protected Telemetry out;
 
-    protected NectarShooterSubsystem shooter;
+    protected PollenShooterSubsystem shooter;
     protected TransferSubsystem transfer;
     protected PollenGateSubsystem gate;
 
@@ -88,7 +92,7 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
         follower.setPose(getStartPose());
         follower.update();
 
-        shooter = new NectarShooterSubsystem(hardwareMap);
+        shooter = new PollenShooterSubsystem(hardwareMap);
         transfer = new TransferSubsystem(hardwareMap);
         gate = new PollenGateSubsystem(hardwareMap);
         intake = new IntakeSubsystem(hardwareMap);
@@ -98,6 +102,8 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
         gate.stop();
         register(shooter, transfer, gate, intake);
 
+        // 自动用 pollen shooter 射球，云台按 pollen 的旋转轴几何瞄准
+        AutoAimConfig.ACTIVE_TURRET = AutoAimConfig.Turret.POLLEN;
         // 云台在 INIT 时朝正前方，当作零点
         aim = new AutoAimSubsystem(hardwareMap, out, follower::pose, follower::velocity, true);
         // 射速按距离查表：自瞄有解时用射击距离，否则用到瞄准点的直线距离
@@ -125,6 +131,10 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
         // 联盟可能在 init 阶段改了，按最终联盟重设起点
         follower.setPose(getStartPose());
         follower.update();
+        // 按起点所在半场选红方瞄准点（下半场 0 号，上半场 1 号），之后每个循环按 y 自动切
+        FieldConstants.AIM_POINT_INDEX = FieldConstants.aimPointIndexForY(follower.pose().y());
+        // 开局：flower 先到 MIDDLE，DEPLOY_DELAY_MS 后 intake 到 EXTENDED（和 TeleOp 按 A 一样）
+        intake.extend();
         Scheduler.schedule(runAutoCommand());
     }
 
@@ -135,7 +145,8 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
 
         follower.update();
         Scheduler.execute();
-        // 先更新定位，再用新位姿瞄准
+        // 先更新定位，再按新位姿所在半场切瞄准点，最后瞄准
+        FieldConstants.updateAimPointForY(follower.pose().y());
         aim.update();
 
         periodic();
@@ -149,6 +160,7 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
         panelsTelemetry.addData("transfer state", transfer.getState());
         panelsTelemetry.addData("gate state", gate.getState());
         panelsTelemetry.addData("aim locked", aim.isLocked());
+        panelsTelemetry.addData("aim point", FieldConstants.AIM_POINT_INDEX);
         if (follower.currentPath() != null) {
             panelsTelemetry.addData("path index", follower.pathIndex());
             panelsTelemetry.addData("distance remaining", follower.distanceToEndpoint());
@@ -190,8 +202,30 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
             aim.enable();
             shooter.accelerate();
             transfer.setState(TransferSubsystem.State.INTAKE);
-            intake.setState(IntakeSubsystem.State.EXTENDED);
+            // 已经伸出就不再调 extend()，否则会把 flower 从 BOTTOM 拉回 MIDDLE
+            if (intake.getTargetState() != IntakeSubsystem.State.EXTENDED) {
+                intake.extend();
+            }
         });
+    }
+
+    /**
+     * flower 放到 BOTTOM。
+     *
+     * <p>按联动规则 intake 必须已经放好（EXTENDED / MIDDLE），所以先等 intake 的放下延时走完再放；
+     * intake 是收着的就直接跳过（不会卡住流程）。
+     */
+    protected Command flowerDown() {
+        return sequential(
+                waitUntil(() -> intake.isDeployed()
+                        || intake.getTargetState() == IntakeSubsystem.State.RETRACTED),
+                instant(intake::flowerDown)
+        );
+    }
+
+    /** flower 升回 MIDDLE，intake 保持原档位不动。 */
+    protected Command flowerUp() {
+        return instant(intake::flowerUp);
     }
 
     /** 射球 ms 毫秒再关上。 */

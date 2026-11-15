@@ -25,15 +25,35 @@ public class FieldConstants {
 
     // 红方云台瞄准点（Pedro 坐标系实测），两个可切换：0 号为默认
     public static double RED_AIM_X = 59.0;
-    public static double RED_AIM_Y = 59.0;
+    public static double RED_AIM_Y = 57.0;
     public static double RED_AIM_X_1 = 59.0;
-    public static double RED_AIM_Y_1 = 82.5;
+    public static double RED_AIM_Y_1 = 84.5;
 
     /**
      * 当前用哪个红方瞄准点：0 = (RED_AIM_X, RED_AIM_Y)，1 = (RED_AIM_X_1, RED_AIM_Y_1)。
      * 用 {@link #toggleAimPoint()} 切换；Panels 里也能直接改。
      */
     public static int AIM_POINT_INDEX = 0;
+
+    /** 按半场自动选瞄准点的分界线（Pedro y，英寸）：低于它用 0 号点，高于它用 1 号点。 */
+    public static double AIM_SPLIT_Y = FIELD_SIZE / 2.0;
+
+    /** 自动切换的滞回宽度（英寸）：越过分界线这么多才切换，避免在中线附近来回跳。 */
+    public static double AIM_SPLIT_HYSTERESIS_IN = 5.0;
+
+    /** 根据机器人 y 坐标所在半场自动更新 {@link #AIM_POINT_INDEX}。每个循环调用一次。 */
+    public static void updateAimPointForY(double robotY) {
+        if (robotY > AIM_SPLIT_Y + AIM_SPLIT_HYSTERESIS_IN) {
+            AIM_POINT_INDEX = 1;
+        } else if (robotY < AIM_SPLIT_Y - AIM_SPLIT_HYSTERESIS_IN) {
+            AIM_POINT_INDEX = 0;
+        }
+    }
+
+    /** 根据 y 坐标直接选瞄准点（不带滞回），用于开局初始化。 */
+    public static int aimPointIndexForY(double robotY) {
+        return robotY > AIM_SPLIT_Y ? 1 : 0;
+    }
 
     /** 在两个瞄准点之间切换。 */
     public static void toggleAimPoint() {

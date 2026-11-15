@@ -2,12 +2,13 @@ package org.firstinspires.ftc.teamcode.opmodes.auto;
 
 import static com.pedropathing.ivy.commands.Commands.waitMs;
 import static com.pedropathing.ivy.groups.Groups.sequential;
+import static org.firstinspires.ftc.teamcode.opmodes.auto.AutoConstants.*;
 
 import com.bylazar.configurables.annotations.Configurable;
 import com.pedropathing.api.Paths;
-import com.pedropathing.api.PoseFactory;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.math.Pose;
+import com.pedropathing.paths.Path;
 import com.pedropathing.paths.interpolator.Interpolator;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
@@ -30,7 +31,7 @@ import org.firstinspires.ftc.teamcode.opmodes.AutoCommandBase;
 public class RedFullPark extends AutoCommandBase {
 
     /** 开局 shooter 加速多久再开门（毫秒）。 */
-    public static double SPIN_UP_MS = 500;
+    public static double SPIN_UP_MS = 1000;
     /** 开局预装球开门时间（毫秒）。 */
     public static double PRELOAD_GATE_MS = 2500;
     /** 到 SHOOT2 后开门时间（毫秒）。 */
@@ -38,31 +39,11 @@ public class RedFullPark extends AutoCommandBase {
     /** 到 SHOOT3 后开门时间（毫秒）。 */
     public static double SHOOT3_GATE_MS = 2500;
 
-    private static final PoseFactory POSE = PoseFactory.degrees();
+    // 点位都在 AutoConstants 里
 
-    // ---- 关键点（英寸 / 度，Visualizer 坐标）----
-    private final Pose start = POSE.of(55.64, 7.677, 90);
-    private final Pose startToShoot1 = POSE.of(55.84, 23.6, 90);
-    private final Pose shoot1ToPollenPrep1Start = POSE.of(55.84, 23.6, 90);
-    private final Pose shoot1ToPollenPrep1 = POSE.of(19.8256, 46.75, 180);
-    private final Pose pollenPrep1ToPollen1Start = POSE.of(19.8256, 46.75, 180);
-    private final Pose pollenPrep1ToPollen1 = POSE.of(12.8, 46.75, 180);
-    private final Pose pollen1ToShoot2 = POSE.of(55.84, 118, 270);
-    private final Pose pollen1ToShoot2Control1 = POSE.of(23.2677, 118.5011, 0);
-    private final Pose pollen1ToShoot2Segment1Heading = POSE.of(55.84, 118, 180);
-    private final Pose pollen1ToShoot2Segment2Start = POSE.of(55.84, 118, 180);
-    private final Pose pollen1ToShoot2Segment2End = POSE.of(55.84, 118, -90);
-    private final Pose shoot2ToPollenPrep2Start = POSE.of(55.84, 118, -90);
-    private final Pose shoot2ToPollenPrep2 = POSE.of(46.8836, 121.3282, 90);
-    private final Pose pollenPrep2ToPollen2 = POSE.of(46.88, 128, 90);
-    private final Pose pollen2ToShoot3Start = POSE.of(46.88, 128, 90);
-    private final Pose pollen2ToShoot3 = POSE.of(55.84, 118, 180);
-    private final Pose pollen2ToShoot3Control1 = POSE.of(46.9869, 118.4687, 0);
-    private final Pose parkStart = POSE.of(55.84, 118, 180);
-    private final Pose park = POSE.of(14.5558, 118, 180);
     @Override
     public Pose getStartPose() {
-        return start;
+        return START_BOTTOM.pose();
     }
 
     @Override
@@ -71,19 +52,79 @@ public class RedFullPark extends AutoCommandBase {
                 // 开局：自动瞄准 + shooter 加速 + transfer 一直转
                 startShooting(),
                 waitMs(SPIN_UP_MS),
-                driveTo(start,startToShoot1),
+                follow(startToShoot1()),
                 shoot(PRELOAD_GATE_MS),
 
-                driveTo(shoot1ToPollenPrep1Start, shoot1ToPollenPrep1),
-                driveTo(pollenPrep1ToPollen1Start, pollenPrep1ToPollen1),
-                follow(Paths.curve(pollenPrep1ToPollen1, pollen1ToShoot2Control1, pollen1ToShoot2).heading(Interpolator.piecewise().until(0.2, Interpolator.constant(pollen1ToShoot2Segment1Heading)).until(1, Interpolator.linear(pollen1ToShoot2Segment2Start, pollen1ToShoot2Segment2End)))),
+                follow(shoot1ToPollenPrep1()),
+                flowerDown(),
+                waitMs(500),
+                follow(pollenPrep1ToPollen1()),
+                waitMs(1000),
+                follow(shoot2PrepToShoot2()),
+                follow(shoot2PrepToShoot2()),
+                flowerUp(),
+                waitMs(200),
                 shoot(SHOOT2_GATE_MS),
 
-                driveTo(shoot2ToPollenPrep2Start, shoot2ToPollenPrep2),
-                driveTo(shoot2ToPollenPrep2, pollenPrep2ToPollen2),
-                follow(Paths.curve(pollen2ToShoot3Start, pollen2ToShoot3Control1, pollen2ToShoot3).linear(pollen2ToShoot3Start, pollen2ToShoot3)),
+                follow(shoot2ToPollenPrep2()),
+                flowerDown(),
+                waitMs(500),
+                follow(pollenPrep2ToPollen2()),
+                waitMs(1000),
+                follow(pollen2ToShoot3()),
+                flowerUp(),
+                waitMs(500),
                 shoot(SHOOT3_GATE_MS),
-                driveTo(parkStart, park)
+
+                follow(park())
         );
+    }
+
+    // ================= 路径（点位见 AutoConstants） =================
+
+    public Path startToShoot1() {
+        Pose a = START_BOTTOM.pose(), b = SHOOT_BOTTOM.pose(90);
+        return Paths.line(a, b).linear(a, b);
+    }
+
+    public Path shoot1ToPollenPrep1() {
+        Pose a = SHOOT_BOTTOM.pose(90), b = POLLEN_MID_PREP.pose();
+        return Paths.line(a, b).linear(a, b);
+    }
+
+    public Path pollenPrep1ToPollen1() {
+        Pose a = POLLEN_MID_PREP.pose(), b = POLLEN_MID.pose();
+        return Paths.line(a, b).linear(a, b);
+    }
+    public Path pollen1ToShoot2Prep() {
+        Pose a = POLLEN_MID.pose(), b = POLLEN_MID_PREP.pose();
+        return Paths.line(a, b).linear(a, b);
+    }
+
+    public Path shoot2PrepToShoot2() {
+        return Paths.curve(POLLEN_MID_PREP.pose(), CTRL_MID_TO_SHOOT_TOP.pose(), SHOOT_TOP.pose(270))
+                .heading(Interpolator.piecewise()
+                        .until(0.2, Interpolator.constant(SHOOT_TOP.pose(180)))
+                        .until(1, Interpolator.linear(SHOOT_TOP.pose(180), SHOOT_TOP.pose(-90))));
+    }
+
+    public Path shoot2ToPollenPrep2() {
+        Pose a = SHOOT_TOP.pose(-90), b = POLLEN_TOP_PREP.pose();
+        return Paths.line(a, b).linear(a, b);
+    }
+
+    public Path pollenPrep2ToPollen2() {
+        Pose a = POLLEN_TOP_PREP.pose(), b = POLLEN_TOP.pose();
+        return Paths.line(a, b).linear(a, b);
+    }
+
+    public Path pollen2ToShoot3() {
+        Pose a = POLLEN_TOP.pose(), b = SHOOT_TOP.pose(180);
+        return Paths.curve(a, CTRL_TOP_TO_SHOOT_TOP.pose(), b).linear(a, b);
+    }
+
+    public Path park() {
+        Pose a = SHOOT_TOP.pose(180), b = PARK_TOP.pose();
+        return Paths.line(a, b).linear(a, b);
     }
 }

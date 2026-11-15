@@ -56,6 +56,9 @@ public class AutoAimSubsystem {
     private final ChassisMotionPredictor predictor = new ChassisMotionPredictor();
 
     private boolean enabled = false;
+    /** 固定角度模式：云台锁在 holdAngle（相对车头），优先于自动瞄准。 */
+    private boolean holding = false;
+    private double holdAngle = 0.0;
     private boolean shootOnTheMove = false;
     private boolean braking = false;
 
@@ -121,6 +124,7 @@ public class AutoAimSubsystem {
     /** 停止瞄准并让云台停下。 */
     public void disable() {
         enabled = false;
+        holding = false;
         locked = false;
         power = 0.0;
         setServoPower(0.0);
@@ -128,6 +132,37 @@ public class AutoAimSubsystem {
 
     public boolean isEnabled() {
         return enabled;
+    }
+
+    /**
+     * 把云台锁在相对车头的固定角度（弧度），暂停自动瞄准。
+     * 用同一套位置环 / 速度环，只是目标角固定、没有前馈。{@link #releaseHold()} 恢复。
+     */
+    public void holdAngle(double angleRad) {
+        if (!holding) {
+            resetFilters();
+        }
+        holding = true;
+        holdAngle = angleRad;
+        locked = false;
+        shot = null; // 射速按直线距离查表，不用过期的解算结果
+    }
+
+    /** 退出固定角度模式；自动瞄准开着就继续瞄准，否则云台停下。 */
+    public void releaseHold() {
+        if (!holding) {
+            return;
+        }
+        holding = false;
+        resetFilters();
+        if (!enabled) {
+            power = 0.0;
+            setServoPower(0.0);
+        }
+    }
+
+    public boolean isHolding() {
+        return holding;
     }
 
     /** 开启后计算边走边射的提前量；关闭时直接瞄真实目标。 */
@@ -195,7 +230,9 @@ public class AutoAimSubsystem {
 
     /** 每个 OpMode 循环调用一次。 */
     public void update() {
-        if (enabled) {
+        if (holding) {
+            runHold();
+        } else if (enabled) {
             runAim();
         }
         sendTelemetry();
@@ -262,6 +299,46 @@ public class AutoAimSubsystem {
                 - present.omega, AutoAimConfig.FF_DEADBAND)
                 : 0.0;
 
+        driveTurret(current, dt);
+
+        tolerance = TurretAimCalculator.lockTolerance(
+                shot.distance,
+                AutoAimConfig.AIM_HALF_WIDTH_IN,
+                Math.toRadians(AutoAimConfig.MIN_LOCK_TOLERANCE_DEG),
+                Math.toRadians(AutoAimConfig.MAX_LOCK_TOLERANCE_DEG));
+        double maxSpeed = shootOnTheMove
+                ? AutoAimConfig.MAX_SHOOT_SPEED
+                : AutoAimConfig.MAX_STATIONARY_SHOOT_SPEED;
+        locked = reachable
+                && Math.abs(error) <= tolerance
+                && Math.abs(measuredVelocity - feedforwardVelocity)
+                        <= Math.toRadians(AutoAimConfig.LOCK_MAX_RATE_ERROR_DEG)
+                && predictor.speed() <= maxSpeed;
+    }
+
+    /** 固定角度模式：目标角 = holdAngle（夹在机械范围内），没有前馈。 */
+    private void runHold() {
+        long now = System.nanoTime();
+        double dt = hasHistory ? Math.max((now - lastTimeNanos) / 1e9, 1e-3) : 0.0;
+        lastTimeNanos = now;
+        applyServoDirections();
+
+        double current = getTurretAngle();
+        filteredVelocity += AutoAimConfig.VEL_FILTER_ALPHA * (getTurretVelocity() - filteredVelocity);
+        measuredVelocity = filteredVelocity;
+        targetAngle = clip(holdAngle,
+                Math.toRadians(AutoAimConfig.MIN_ANGLE_DEG),
+                Math.toRadians(AutoAimConfig.MAX_ANGLE_DEG));
+        reachable = true;
+        error = targetAngle - current;
+        feedforwardVelocity = 0.0;
+
+        driveTurret(current, dt);
+        locked = false;
+    }
+
+    /** 位置环 → 目标角速度 → kS / kV / kA 前馈 + 速度环 → 舵机功率。用 error、feedforwardVelocity、measuredVelocity。 */
+    private void driveTurret(double current, double dt) {
         // 软死区：从死区边缘连续地长出来，不会在边缘处突然跳一个速度指令
         double positionVelocity = AutoAimConfig.KP_POS
                 * softDeadband(error, Math.toRadians(AutoAimConfig.DEADBAND_DEG));
@@ -284,20 +361,6 @@ public class AutoAimSubsystem {
 
         power = applyLimits(clip(rawPower, -AutoAimConfig.MAX_POWER, AutoAimConfig.MAX_POWER), current);
         setServoPower(power);
-
-        tolerance = TurretAimCalculator.lockTolerance(
-                shot.distance,
-                AutoAimConfig.AIM_HALF_WIDTH_IN,
-                Math.toRadians(AutoAimConfig.MIN_LOCK_TOLERANCE_DEG),
-                Math.toRadians(AutoAimConfig.MAX_LOCK_TOLERANCE_DEG));
-        double maxSpeed = shootOnTheMove
-                ? AutoAimConfig.MAX_SHOOT_SPEED
-                : AutoAimConfig.MAX_STATIONARY_SHOOT_SPEED;
-        locked = reachable
-                && Math.abs(error) <= tolerance
-                && Math.abs(measuredVelocity - feedforwardVelocity)
-                        <= Math.toRadians(AutoAimConfig.LOCK_MAX_RATE_ERROR_DEG)
-                && predictor.speed() <= maxSpeed;
     }
 
     private void resetFilters() {
@@ -384,7 +447,9 @@ public class AutoAimSubsystem {
 
     private void sendTelemetry() {
         String state;
-        if (!enabled) {
+        if (holding) {
+            state = String.format("HOLD %.0f°", Math.toDegrees(holdAngle));
+        } else if (!enabled) {
             state = "OFF";
         } else if (!reachable) {
             state = "OUT OF RANGE";
