@@ -33,3 +33,8 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# Local notes & OnBot Java backups
+notebook/
+onbotjava-backup/
+output/
