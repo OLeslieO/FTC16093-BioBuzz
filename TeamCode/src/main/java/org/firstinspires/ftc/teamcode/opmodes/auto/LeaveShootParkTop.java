@@ -11,18 +11,14 @@ import com.pedropathing.paths.Path;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
 import org.firstinspires.ftc.teamcode.opmodes.AutoCommandBase;
+import static com.pedropathing.ivy.commands.Commands.waitMs;
 
-/**
- * 自动阶段：按 Pedro Pathing Visualizer 导出的路线跑 path1（start → path1 直线）。
- * 子系统、循环、位姿传递都在 {@link AutoCommandBase} 里。
- *
- * <p><b>INIT 时云台要朝正前方</b>（会把当前位置当作零点）。
- */
-@Autonomous(name = "LeavePark", group = "main")
+
+
+@Autonomous(name = "LeaveShootPark", group = "main")
 @Configurable
-public class LeavePark extends AutoCommandBase {
+public class LeaveShootParkTop extends AutoCommandBase {
 
-    // 点位都在 AutoConstants 里
 
     @Override
     public Pose getStartPose() {
@@ -32,14 +28,24 @@ public class LeavePark extends AutoCommandBase {
     @Override
     public Command runAutoCommand() {
         return sequential(
-                follow(path1())
+                startShooting(),
+                follow(path1()),
+                waitMs(500),
+                shoot(3000),
+                follow(path2()),
+                stopAll()
+
         );
     }
 
     // ================= 路径（点位见 AutoConstants） =================
 
     public Path path1() {
-        Pose a = LEAVE_START.pose(), b = LEAVE_END.pose();
+        Pose a = LEAVE_START.pose(), b = SHOOT_TOP.pose();
+        return Paths.line(a, b).linear(a, b);
+    }
+    public Path path2() {
+        Pose a = SHOOT_TOP.pose(), b = LEAVE_END.pose();
         return Paths.line(a, b).linear(a, b);
     }
 }

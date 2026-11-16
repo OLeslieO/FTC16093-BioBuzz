@@ -14,19 +14,8 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
 import org.firstinspires.ftc.teamcode.opmodes.AutoCommandBase;
 
-/**
- * 自动阶段：按 Pedro Pathing Visualizer 导出的路线依次跑完。
- *
- * <p>路线：start → shoot1/intake1 → shoot2（曲线）→ intake2 → intake3（两段）→ shoot3。
- * 路径由 Ivy 调度器执行；结束时把位姿存给 TeleOp。
- *
- * <p>发射：开局打开自动瞄准、shooter 加速、transfer 一直转（整个自动阶段都不停）；
- * 开局等 SPIN_UP_MS 后开门 PRELOAD_GATE_MS；到 SHOOT2 后开门 SHOOT2_GATE_MS；
- * 到 SHOOT3 后开门 SHOOT3_GATE_MS。子系统、循环、位姿传递都在 {@link AutoCommandBase} 里。
- *
- * <p><b>INIT 时云台要朝正前方</b>（会把当前位置当作零点）。
- */
-@Autonomous(name = "RedFullPark", group = "main")
+
+@Autonomous(name = "RedFullPark 2", group = "main")
 @Configurable
 public class RedFullPark extends AutoCommandBase {
 
@@ -35,9 +24,9 @@ public class RedFullPark extends AutoCommandBase {
     /** 开局预装球开门时间（毫秒）。 */
     public static double PRELOAD_GATE_MS = 2500;
     /** 到 SHOOT2 后开门时间（毫秒）。 */
-    public static double SHOOT2_GATE_MS = 2500;
+    public static double SHOOT2_GATE_MS = 2200;
     /** 到 SHOOT3 后开门时间（毫秒）。 */
-    public static double SHOOT3_GATE_MS = 2500;
+    public static double SHOOT3_GATE_MS = 2200;
 
     // 点位都在 AutoConstants 里
 
@@ -49,7 +38,6 @@ public class RedFullPark extends AutoCommandBase {
     @Override
     public Command runAutoCommand() {
         return sequential(
-                // 开局：自动瞄准 + shooter 加速 + transfer 一直转
                 startShooting(),
                 waitMs(SPIN_UP_MS),
                 follow(startToShoot1()),
@@ -80,7 +68,6 @@ public class RedFullPark extends AutoCommandBase {
         );
     }
 
-    // ================= 路径（点位见 AutoConstants） =================
 
     public Path startToShoot1() {
         Pose a = START_BOTTOM.pose(), b = SHOOT_BOTTOM.pose(90);

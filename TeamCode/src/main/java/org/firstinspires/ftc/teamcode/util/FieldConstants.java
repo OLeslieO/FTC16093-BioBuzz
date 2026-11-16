@@ -29,19 +29,13 @@ public class FieldConstants {
     public static double RED_AIM_X_1 = 59.0;
     public static double RED_AIM_Y_1 = 84.5;
 
-    /**
-     * 当前用哪个红方瞄准点：0 = (RED_AIM_X, RED_AIM_Y)，1 = (RED_AIM_X_1, RED_AIM_Y_1)。
-     * 用 {@link #toggleAimPoint()} 切换；Panels 里也能直接改。
-     */
+
     public static int AIM_POINT_INDEX = 0;
 
-    /** 按半场自动选瞄准点的分界线（Pedro y，英寸）：低于它用 0 号点，高于它用 1 号点。 */
     public static double AIM_SPLIT_Y = FIELD_SIZE / 2.0;
 
-    /** 自动切换的滞回宽度（英寸）：越过分界线这么多才切换，避免在中线附近来回跳。 */
     public static double AIM_SPLIT_HYSTERESIS_IN = 5.0;
 
-    /** 根据机器人 y 坐标所在半场自动更新 {@link #AIM_POINT_INDEX}。每个循环调用一次。 */
     public static void updateAimPointForY(double robotY) {
         if (robotY > AIM_SPLIT_Y + AIM_SPLIT_HYSTERESIS_IN) {
             AIM_POINT_INDEX = 1;

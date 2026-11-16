@@ -6,18 +6,12 @@ import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.Range;
 import com.seattlesolvers.solverslib.command.SubsystemBase;
 
-/**
- * Pollen 发射口挡板舵机，两档：SHOOT（打开放球）/ STOP（关闭挡球）。
- *
- * <p>档位值是 {@code public static}，可以在 Panels 里实时调，下一个循环生效。
- */
+
 @Configurable
 public class PollenGateSubsystem extends SubsystemBase {
 
     public enum State {
-        /** 打开，放球去发射。 */
         SHOOT,
-        /** 关闭，挡住球。 */
         STOP
     }
 
@@ -50,7 +44,6 @@ public class PollenGateSubsystem extends SubsystemBase {
         setState(State.STOP);
     }
 
-    /** 当前档位对应的舵机位置。 */
     public double getTargetPosition() {
         switch (state) {
             case SHOOT:
@@ -61,7 +54,6 @@ public class PollenGateSubsystem extends SubsystemBase {
         }
     }
 
-    /** 每个循环把当前档位写给舵机；加入 CommandScheduler 后自动调用。 */
     @Override
     public void periodic() {
         pollenGate.setPosition(Range.clip(getTargetPosition(), 0.0, 1.0));

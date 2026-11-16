@@ -11,30 +11,7 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 
-/**
- * CR 舵机云台测试：Axon MAX MK2（CR 模式）经 3.375:1 减速带动云台，
- * 角度由外置 REV Through Bore v1（8192 CPR）读取。不依赖 AutoAimSubsystem。
- *
- * <p><b>INIT 前：</b>云台手动摆到正前方（INIT 时把编码器清零，当作 0°）。
- * 舵机名、编码器端口名、编码器安装位置在 INIT 时读取，改了要重新 INIT。
- *
- * <p>MODE（Panels 实时切换）：
- * <ul>
- *   <li>0 = 停止，只读角度（可以用手转云台检查编码器读数和换算）</li>
- *   <li>1 = 开环功率 POWER：查极性、测 kS / kV</li>
- *   <li>2 = 定位 TARGET_DEG：位置环 + kS / kV 前馈 + 速度环</li>
- *   <li>3 = 阶跃往返：每 STEP_PERIOD 秒在 STEP_A_DEG / STEP_B_DEG 之间切换，用来调参</li>
- * </ul>
- *
- * <p>Panels Graph 里选 "target_deg" 和 "angle_deg" 对比位置，
- * "vel_cmd_dps" 和 "vel_dps" 对比速度。
- *
- * <p>极性要求：POWER 为正时 angle_deg 必须变大（逆时针为正，从上往下看）。
- * 不对就切 ENCODER_REVERSED（只翻读数），或同时翻转 SERVO_REVERSED_0 和 SERVO_REVERSED_1（只翻输出）。
- *
- * <p>两个舵机共同驱动：先把一个舵机的 SERVO_NAME 暂时填成另一个的名字单独测，
- * 确认各自的方向，再回到两个一起。两个舵机方向不一致时它们会互相对抗，会堵转发热。
- */
+
 @TeleOp(name = "Turret Servo Test", group = "test")
 @Configurable
 public class TurretServoTest extends LinearOpMode {

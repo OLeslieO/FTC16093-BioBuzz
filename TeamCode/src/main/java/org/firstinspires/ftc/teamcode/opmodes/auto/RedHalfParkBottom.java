@@ -13,18 +13,7 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
 import org.firstinspires.ftc.teamcode.opmodes.AutoCommandBase;
 
-/**
- * 自动阶段：按 Pedro Pathing Visualizer 导出的路线依次跑完。
- *
- * <p>路线：start → shoot1 → pollenPrep1 → pollen1 →（曲线）shoot2 →
- * pollenPrep2 → pollen2 → shoot3 →（曲线）park。
- *
- * <p>发射：开局打开自动瞄准、shooter 加速、transfer 一直转；
- * 到 SHOOT1 / SHOOT2 / SHOOT3 后各开门一次。
- * 子系统、循环、位姿传递都在 {@link AutoCommandBase} 里。
- *
- * <p><b>INIT 时云台要朝正前方</b>（会把当前位置当作零点）。
- */
+
 @Autonomous(name = "RedHalfParkBottom", group = "main")
 @Configurable
 public class RedHalfParkBottom extends AutoCommandBase {
@@ -38,8 +27,6 @@ public class RedHalfParkBottom extends AutoCommandBase {
     /** 到 SHOOT3 后开门时间（毫秒）。 */
     public static double SHOOT3_GATE_MS = 2500;
 
-    // 点位都在 AutoConstants 里
-
     @Override
     public Pose getStartPose() {
         return START_BOTTOM.pose();
@@ -48,7 +35,6 @@ public class RedHalfParkBottom extends AutoCommandBase {
     @Override
     public Command runAutoCommand() {
         return sequential(
-                // 开局：自动瞄准 + shooter 加速 + transfer 一直转
                 startShooting(),
                 waitMs(SPIN_UP_MS),
                 follow(startToShoot1()),
@@ -72,7 +58,6 @@ public class RedHalfParkBottom extends AutoCommandBase {
         );
     }
 
-    // ================= 路径（点位见 AutoConstants） =================
 
     public Path startToShoot1() {
         Pose a = START_BOTTOM.pose(), b = SHOOT_BOTTOM.pose(90);

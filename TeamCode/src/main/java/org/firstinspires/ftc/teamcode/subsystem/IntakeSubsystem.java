@@ -21,6 +21,9 @@ import com.seattlesolvers.solverslib.command.SubsystemBase;
  *   <li>收 intake：intake 到 RETRACTED，等 {@link #RETRACT_DELAY_MS} 后 flower 到 TOP</li>
  * </ul>
  * 延时是非阻塞的，在 {@link #periodic()} 里推进。
+ *
+ * <p>{@link #setFlowerEnabled(boolean) setFlowerEnabled(false)} 后：不再写 flower 舵机，
+ * flower 相关方法都不生效，intake 换档直接切过去（没有联动和延时）。
  */
 @Configurable
 public class IntakeSubsystem extends SubsystemBase {
@@ -45,14 +48,14 @@ public class IntakeSubsystem extends SubsystemBase {
     public static String FLOWER_SERVO_NAME = "flower";
 
     // 左舵机档位
-    public static double RETRACTED_POSITION = 0.55;
-    public static double MIDDLE_POSITION = 0.28;
-    public static double EXTENDED_POSITION = 0.5;
+    public static double RETRACTED_POSITION = 0.13;
+    public static double MIDDLE_POSITION = 0.36;
+    public static double EXTENDED_POSITION = 0.38;
 
     // 右舵机档位
-    public static double RIGHT_RETRACTED_POSITION = 0.42;
-    public static double RIGHT_MIDDLE_POSITION = 0.67;
-    public static double RIGHT_EXTENDED_POSITION = 0.75;
+    public static double RIGHT_RETRACTED_POSITION = 0.13;
+    public static double RIGHT_MIDDLE_POSITION = 0.29;
+    public static double RIGHT_EXTENDED_POSITION = 0.42;
 
     // flower 档位
     public static double FLOWER_TOP_POSITION = 0;
@@ -79,15 +82,41 @@ public class IntakeSubsystem extends SubsystemBase {
     private FlowerState pendingFlowerState = null;
     private final ElapsedTime pendingTimer = new ElapsedTime();
 
+    /** false = 禁用 flower，并忽略 flower / intake 联动。 */
+    private boolean flowerEnabled = true;
+
     public IntakeSubsystem(HardwareMap hardwareMap) {
         leftServo = hardwareMap.get(Servo.class, LEFT_SERVO_NAME);
         rightServo = hardwareMap.get(Servo.class, RIGHT_SERVO_NAME);
         flowerServo = hardwareMap.get(Servo.class, FLOWER_SERVO_NAME);
     }
 
-    /** 切 intake 档位，flower 按联动规则跟着走。 */
+    /**
+     * 禁用 / 启用 flower。禁用时不再写 flower 舵机，intake 换档直接切过去（忽略联动）。
+     */
+    public void setFlowerEnabled(boolean enabled) {
+        flowerEnabled = enabled;
+        if (!enabled) {
+            // 正在等的联动全部取消，intake 直接到最终档位
+            if (pendingState != null) {
+                state = pendingState;
+            }
+            pendingState = null;
+            pendingFlowerState = null;
+        }
+    }
+
+    public boolean isFlowerEnabled() {
+        return flowerEnabled;
+    }
+
+    /** 切 intake 档位，flower 按联动规则跟着走（flower 禁用时直接切）。 */
     public void setState(State target) {
-        if (target == State.RETRACTED) {
+        if (!flowerEnabled) {
+            pendingState = null;
+            pendingFlowerState = null;
+            state = target;
+        } else if (target == State.RETRACTED) {
             retract();
         } else {
             deploy(target);
@@ -109,6 +138,10 @@ public class IntakeSubsystem extends SubsystemBase {
     }
 
     public void retract() {
+        if (!flowerEnabled) {
+            setState(State.RETRACTED);
+            return;
+        }
         pendingState = null;
         boolean intakeMoved = state != State.RETRACTED;
         state = State.RETRACTED;
@@ -154,7 +187,7 @@ public class IntakeSubsystem extends SubsystemBase {
      * @return 是否生效
      */
     public boolean flowerDown() {
-        if (!isDeployed()) {
+        if (!flowerEnabled || !isDeployed()) {
             return false;
         }
         flowerState = FlowerState.BOTTOM;
@@ -163,7 +196,7 @@ public class IntakeSubsystem extends SubsystemBase {
 
     /** 收 flower：flower 回 MIDDLE。intake 收着时 flower 应该在 TOP，所以忽略。 */
     public void flowerUp() {
-        if (!isDeployed()) {
+        if (!flowerEnabled || !isDeployed()) {
             return;
         }
         flowerState = FlowerState.MIDDLE;
@@ -231,6 +264,8 @@ public class IntakeSubsystem extends SubsystemBase {
 
         leftServo.setPosition(Range.clip(getRightTargetPosition(), 0.0, 1.0));
         rightServo.setPosition(Range.clip(getTargetPosition(), 0.0, 1.0));
-        flowerServo.setPosition(Range.clip(getFlowerTargetPosition(), 0.0, 1.0));
+        if (flowerEnabled) {
+            flowerServo.setPosition(Range.clip(getFlowerTargetPosition(), 0.0, 1.0));
+        }
     }
 }

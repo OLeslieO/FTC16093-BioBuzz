@@ -51,8 +51,8 @@ public class AutoAimConfig {
     // ---------------------------------------------------------------
 
     /** 云台允许转到的最小 / 最大角度（度，相对机器人正前方），由线缆和机械限位决定。 */
-    public static double MIN_ANGLE_DEG = -125.0;
-    public static double MAX_ANGLE_DEG = 125.0;
+    public static double MIN_ANGLE_DEG = -100.0;
+    public static double MAX_ANGLE_DEG = 100.0;
 
     /** 离机械限位这么近（度）时，禁止继续朝限位方向输出功率。 */
     public static double LIMIT_MARGIN_DEG = 3.0;

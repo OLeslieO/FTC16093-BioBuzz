@@ -15,16 +15,7 @@ import com.qualcomm.robotcore.util.Range;
 
 import java.util.List;
 
-/**
- * 纯 PID 的 shooter 速度控制（无前馈），两个飞轮用平均速度、同一个输出。
- *
- * error  = (target - avgVelocity) / 20
- * output = P·error + I·∫error·dt + D·dError/dt，限幅到 [-1, 1]
- * 目标切换时积分和 lastError 清零。
- *
- * 参数都在 Panels 里实时调。
- * 手柄：右扳机 = 目标速度 / 松开 = 空转速度；A = intake（transfer）；右肩键 = 开门。
- */
+
 @TeleOp(name = "Test Shooter PID", group = "test")
 @Configurable
 public class ShooterPIDTest extends LinearOpMode {

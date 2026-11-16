@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.opmodes;
+package org.firstinspires.ftc.teamcode.opmodes.teleop;
 
 import com.bylazar.configurables.annotations.Configurable;
 import com.bylazar.telemetry.JoinedTelemetry;
@@ -11,6 +11,7 @@ import com.seattlesolvers.solverslib.gamepad.GamepadEx;
 import com.seattlesolvers.solverslib.gamepad.GamepadKeys;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
+import org.firstinspires.ftc.teamcode.opmodes.CommandOpModeEx;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.subsystem.NectarGateSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.IntakeSubsystem;
@@ -30,16 +31,15 @@ import org.firstinspires.ftc.teamcode.util.FieldConstants;
  * <p>自动瞄准需要场地位姿，所以底盘换成 Pedro 的 {@link PPDriveSubsystem}（robot-centric），
  * 不再用 DriveSubsystem（两个都开会抢同一组电机）。
  *
- * <p><b>INIT：</b>如果自动阶段存了位姿就沿用（云台编码器也不清零）；
+ * <p><b>INIT：</b>如果自动阶段存了位姿就沿用（云台编码器也不清零），读完就清掉，下次再开 TeleOp 不会再用；
  * 否则车摆在 (START_X, START_Y, START_HEADING_DEG)，云台手动摆到正前方当零点。
  * init 阶段 X 选蓝方，B 选红方。
  *
  * <p>手柄 1（全部操作都在手柄 1）：
  * <ul>
  *   <li>左摇杆平移，右摇杆左右转向；按住 dpad 左键慢速</li>
- *   <li>Y：flower 在 bottom / middle 之间切换（intake 放下时才生效）</li>
- *   <li>A：intake 在 middle / retracted 之间切换；开局默认 middle
- *       （flower 和 intake 的先后顺序按 {@link IntakeSubsystem} 的联动规则）</li>
+ *   <li>A：intake 在 extended / retracted 之间切换；开局默认 extended。
+ *       flower 禁用（不写舵机），intake 直接换档，不走联动规则</li>
  *   <li>左肩键：在 Pollen / Nectar 之间切换（开局默认 Pollen），瞄准云台和加速的 shooter 一起切；
  *       切换后对应 shooter 第一次转到它的 MIN_SHOT_VEL 时，手柄震动 SPEED_RUMBLE_MS</li>
  *   <li>右扳机：开当前云台对应的 gate 并送球（Pollen 功率 POLLEN_FEED_POW，Nectar 功率 NECTAR_FEED_POW）</li>
@@ -52,29 +52,25 @@ import org.firstinspires.ftc.teamcode.util.FieldConstants;
  *   <li>瞄准点自动按半场选：车在 y &lt; 70.75 瞄 (59, 59)，y &gt; 70.75 瞄 (59, 82.5)（红方）</li>
  * </ul>
  */
-@TeleOp(name = "AutoAim TeleOp", group = "main")
+@TeleOp(name = "TeleOp Single", group = "main")
 @Configurable
-public class AutoAimTeleOp extends CommandOpModeEx {
+public class TeleOpSingle extends CommandOpModeEx {
 
-    /** 慢速模式下的功率系数。 */
     public static double SLOW_SCALE = 0.35;
 
-    /** 右扳机超过这个值就开门送球。 */
+
     public static double GATE_TRIGGER_THRESHOLD = 0.5;
-    /** 左扳机超过这个值就 outtake。 */
     public static double OUTTAKE_TRIGGER_THRESHOLD = 0.5;
 
     /** 射 Pollen 时 transfer 送球功率。 */
     public static double POLLEN_FEED_POW = 1.0;
     /** 射 Nectar 时 transfer 送球功率。 */
-    public static double NECTAR_FEED_POW = 0.9;
+    public static double NECTAR_FEED_POW = 1.0;
     /** 右肩键吸球时 transfer 功率。 */
-    public static double INTAKE_FEED_POW = 0.85;
+    public static double INTAKE_FEED_POW = 1.0;
 
-    /** 切换 shooter 后第一次到达最低射速时手柄震动的时长（毫秒）。 */
     public static int SPEED_RUMBLE_MS = 500;
 
-    /** dpad 上锁定云台的角度（相对车头，度）。 */
     public static double TURRET_HOLD_DEG = 0.0;
 
     /** 三个摇杆都小于这个值时认为底盘在刹车，启用刹车预测。 */
@@ -85,7 +81,6 @@ public class AutoAimTeleOp extends CommandOpModeEx {
     public static double START_Y = 7.677;
     public static double START_HEADING_DEG = 90.0;
 
-    /** 没被选中的那个 shooter：true = IDLE 低速空转（切换后到速更快），false = STOP。 */
     public static boolean INACTIVE_SHOOTER_IDLE = true;
 
     /** 开局是否自动打开自动瞄准。 */
@@ -102,12 +97,13 @@ public class AutoAimTeleOp extends CommandOpModeEx {
 
     private IntakeSubsystem intake;
 
-    /** 上一个循环瞄准的云台，用来发现切换。 */
     private AutoAimConfig.Turret lastTurret;
     /** 切换后还没到最低射速，到了就震动一次。 */
     private boolean waitingForSpeed = false;
     private GamepadEx driver;
     private Telemetry out;
+    /** INIT 时是否用了自动阶段传过来的位姿（读完开关就清掉了，所以单独记一下）。 */
+    private boolean fromAuto;
 
     @Override
     public void initialize() {
@@ -122,14 +118,12 @@ public class AutoAimTeleOp extends CommandOpModeEx {
         follower = Constants.create(hardwareMap);
         drive = new PPDriveSubsystem(follower, out);
         drive.setRobotCentric(true);
-        boolean fromAuto = drive.restorePose();
+        fromAuto = drive.restorePose();
         if (!fromAuto) {
             drive.setPose(startPose());
         }
-        // 瞄准点按车所在半场自动选
         FieldConstants.AIM_POINT_INDEX = FieldConstants.aimPointIndexForY(drive.getPose().y());
 
-        // 从自动阶段接过来时云台编码器沿用自动阶段的读数，不清零
         aim = new AutoAimSubsystem(hardwareMap, out, drive::getPose, drive::getVelocity, !fromAuto);
 
         transfer = new TransferSubsystem(hardwareMap);
@@ -138,7 +132,7 @@ public class AutoAimTeleOp extends CommandOpModeEx {
         nectarShooter = new NectarShooterSubsystem(hardwareMap);
         pollenShooter = new PollenShooterSubsystem(hardwareMap);
         intake = new IntakeSubsystem(hardwareMap);
-        // 射速按距离查表：自瞄开着用解算出的射击距离（边走边射时已含提前量），否则用到瞄准点的直线距离
+        intake.setFlowerEnabled(false);
         nectarShooter.setDistanceSupplier(() -> aim.isEnabled() && aim.getShotDistance() > 0
                 ? aim.getShotDistance()
                 : Alliance.get().distanceToAim(drive.getPose()));
@@ -159,22 +153,18 @@ public class AutoAimTeleOp extends CommandOpModeEx {
         Pose p = drive.getPose();
         out.addData("Alliance", Alliance.get() + "（X 蓝 / B 红）");
         out.addData("Pose", "(%.1f, %.1f, %.1f°)", p.x(), p.y(), Math.toDegrees(p.heading()));
-        out.addData("Pose From Auto", PPDriveSubsystem.hasTransferredPose());
+        out.addData("Pose From Auto", fromAuto);
         out.addData("Turret Angle", "%.1f°", Math.toDegrees(aim.getTurretAngle()));
         out.update();
     }
 
     @Override
     public void functionalButtons() {
-        // Y：flower bottom ↔ middle（intake 没放下时忽略）
-        driver.getGamepadButton(GamepadKeys.Button.Y)
-                .whenPressed(new InstantCommand(intake::toggleFlower, intake));
-
-        // A：intake middle ↔ retracted（flower 跟着按联动规则走）
+        // A：intake extended ↔ retracted（flower 禁用，直接换档）
         driver.getGamepadButton(GamepadKeys.Button.A)
                 .whenPressed(new InstantCommand(() -> {
                     if (intake.getTargetState() == IntakeSubsystem.State.RETRACTED) {
-                        intake.middle();
+                        intake.extend();
                     } else {
                         intake.retract();
                     }
@@ -194,7 +184,6 @@ public class AutoAimTeleOp extends CommandOpModeEx {
                     }
                 }));
 
-        // 左肩键：Pollen ↔ Nectar（瞄准云台 + 加速的 shooter 一起切）
         driver.getGamepadButton(GamepadKeys.Button.LEFT_BUMPER)
                 .whenPressed(new InstantCommand(() -> {
                     AutoAimConfig.toggleTurret();
@@ -210,8 +199,8 @@ public class AutoAimTeleOp extends CommandOpModeEx {
         if (AIM_ON_START) {
             aim.enable();
         }
-        // 开局 intake 默认 middle：flower 先到 middle，延时后 intake 到 middle
-        intake.middle();
+        // 开局 intake 默认 extended
+        intake.extend();
     }
 
     @Override
@@ -243,23 +232,14 @@ public class AutoAimTeleOp extends CommandOpModeEx {
         Pose pose = drive.getPose();
         out.addData("pose", "(%.1f, %.1f, %.1f°)", pose.x(), pose.y(), Math.toDegrees(pose.heading()));
 
-        out.addData("intake", "%s（目标 %s）", intake.getState(), intake.getTargetState());
-        out.addData("flower", "%s → %.2f", intake.getFlowerState(), intake.getFlowerTargetPosition());
-
         out.addData("nectar target", nectarShooter.getTargetVelocity());
         out.addData("nectar velocity", nectarShooter.getVelocity());
-        out.addData("nectar error", nectarShooter.getError());
-        out.addData("nectar table distance", "%.1f in", nectarShooter.getDistance());
 
         out.addData("pollen target", pollenShooter.getTargetVelocity());
-        out.addData("pollen table distance", "%.1f in", pollenShooter.getDistance());
         out.addData("pollen velocity", pollenShooter.getVelocity());
-        out.addData("pollen error", pollenShooter.getError());
         out.addData("aim turret", AutoAimConfig.ACTIVE_TURRET);
-        out.addData("aim shoot on the move", aim.isShootOnTheMove());
         out.addData("aim point", "#%d (%.1f, %.1f)", FieldConstants.AIM_POINT_INDEX,
                 Alliance.get().getAimX(), Alliance.get().getAimY());
-        out.addData("distance to aim", "%.1f in", Alliance.get().distanceToAim(drive.getPose()));
         out.update();
     }
 

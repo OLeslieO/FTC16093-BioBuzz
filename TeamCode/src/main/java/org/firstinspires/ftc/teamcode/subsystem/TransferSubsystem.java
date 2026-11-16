@@ -10,15 +10,10 @@ import com.seattlesolvers.solverslib.command.SubsystemBase;
 public class TransferSubsystem extends SubsystemBase {
 
     public enum State {
-        /** 加速。 */
         INTAKE,
-        /** 空转。 */
         OUTAKE,
-        /** 射球时送球（右扳机开门时用）。 */
         SHOOT,
-        /** 停止。 */
         STOP,
-        /** 自定义功率，见 {@link #setPower(double)}。 */
         CUSTOM
     }
 
@@ -63,13 +58,11 @@ public class TransferSubsystem extends SubsystemBase {
         setState(State.STOP);
     }
 
-    /** 直接指定功率（切到 CUSTOM 档）。 */
     public void setPower(double power) {
         customPower = power;
         setState(State.CUSTOM);
     }
 
-    /** 当前档位对应的shooter速度 */
     public double getTargetPower() {
         switch (state) {
             case INTAKE:
@@ -87,7 +80,6 @@ public class TransferSubsystem extends SubsystemBase {
         }
     }
 
-    /** 每个循环把当前速度写给电机；加入 CommandScheduler 后自动调用。 */
     @Override
     public void periodic() {
         double power = getTargetPower();

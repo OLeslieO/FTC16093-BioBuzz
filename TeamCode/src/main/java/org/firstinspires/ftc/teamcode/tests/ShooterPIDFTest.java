@@ -14,19 +14,6 @@ import com.qualcomm.robotcore.util.ElapsedTime;
 
 import java.util.List;
 
-/**
- * 自定义 PID + F 前馈的 shooter 速度控制。pollen / nectar 各自一个电机带各自的飞轮，
- * 各用自己的编码器、各自一个控制器（参数共用）。
- *
- * output = F·target + P·error + I·∫error·dt + D·dError/dt，限幅 [-1, 1]
- *   - 积分防饱和：只在没饱和、或误差在往回拉饱和时才积分；I = 0 时清空积分。
- *   - 目标改变、切换 USE_F、切换 USE_PID 时重置控制器。
- *   - USE_PID = false 时改用 Hub 自带的 RUN_USING_ENCODER 速度控制。
- *
- * 所有参数在 Panels 里实时改。
- * 手柄：右扳机 = 射击速度 / 松开 = 空转速度（0 = 停）；A = intake；右肩键 = 开门；
- *       dpad_up/down 切换 pollen / nectar / 两个一起（也可以在 Panels 改 shooterSelect）。
- */
 @TeleOp(name = "Test Shooter PIDF", group = "test")
 @Configurable
 public class ShooterPIDFTest extends LinearOpMode {

@@ -13,21 +13,7 @@ import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.subsystem.PPDriveSubsystem;
 
-/**
- * 定位测试：开车绕场，看 telemetry 里的坐标对不对。
- *
- * <p><b>INIT 前：</b>车摆在 (START_X, START_Y)，车头朝 START_HEADING_DEG
- * （默认是下方自动起点 (55.64, 7.677, 90°)）。
- *
- * <p>手柄 1：
- * <ul>
- *   <li>左摇杆：平移；右摇杆 X：转向；按住左肩键：慢速</li>
- *   <li>A：切换车身 / 场地坐标驾驶（默认车身）</li>
- *   <li>X：把位姿重置回起点（车要先摆回起点）</li>
- * </ul>
- *
- * <p>X / Y / Heading 由 {@link PPDriveSubsystem} 每个循环输出；telemetry 同时发到 Driver Station 和 Panels。
- */
+
 @TeleOp(name = "Localization Test", group = "test")
 @Configurable
 public class LocalizationTest extends LinearOpMode {

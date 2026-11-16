@@ -11,16 +11,7 @@ import com.seattlesolvers.solverslib.command.SubsystemBase;
 
 import java.util.function.DoubleSupplier;
 
-/**
- * Pollen shooter 飞轮，自定义 PID + F 前馈速度控制（算法同 ShooterPIDFTest）。
- *
- * output = F·target + P·error + I·∫error·dt + D·dError/dt，限幅 [-1, 1]
- *   - 积分防饱和：只在没饱和、或误差在往回拉饱和时才积分；I = 0 时清空积分。
- *   - 换档、目标跳变超过 RESET_THRESHOLD、切换 USE_F / USE_PID 时重置控制器。
- *   - USE_PID = false 时改用 Hub 自带的 RUN_USING_ENCODER 速度控制。
- *
- * <p>所有参数都是 {@code public static}，可以在 Panels 里实时调，下一个循环生效。
- */
+
 @Configurable
 public class PollenShooterSubsystem extends SubsystemBase {
 
@@ -52,27 +43,19 @@ public class PollenShooterSubsystem extends SubsystemBase {
      * 新测的点按距离从小到大插进去，两个数组长度要一样。
      */
     public static double[] SHOT_DIST_IN = {29.47, 34.44, 43.72, 49.44};
-    public static double[] SHOT_VEL = {1500.0, 1540.0, 1560.0, 1660.0};
-    /** 超出表的范围时，是否沿两端那一段的斜率外推（否则取端点值）。 */
+    public static double[] SHOT_VEL = {1520.0, 1560.0, 1580.0, 1680.0};
     public static boolean EXTRAPOLATE = true;
-    /** 查表结果的上下限（ticks/s），防止外推太离谱。 */
     public static double MIN_SHOT_VEL = 1440.0;
     public static double MAX_SHOT_VEL = 1800.0;
 
     // ---------- 控制器 ----------
-    /** true = 自己算功率；false = Hub 自带速度控制。 */
     public static boolean USE_PID = true;
-    /** 功率 / (ticks/s) 误差。 */
     public static double VELOCITY_P = 0.0038;
     public static double VELOCITY_I = 0;
     public static double VELOCITY_D = 0;
-    /** 前馈 = VELOCITY_F × 目标 ticks/s，起点 ≈ 1 / 满功率速度。 */
     public static boolean USE_F = true;
     public static double VELOCITY_F = 0.00051;
-    /**
-     * 按距离查表时目标每个循环都在小幅变化，只有换档或目标跳变超过这个值（ticks/s）
-     * 才重置控制器，否则积分和 D 永远起不来。
-     */
+
     public static double RESET_THRESHOLD = 150;
     /** 误差在这范围内算"到速"。 */
     public static double READY_TOLERANCE = 60;
@@ -127,10 +110,7 @@ public class PollenShooterSubsystem extends SubsystemBase {
         setState(State.STOP);
     }
 
-    /**
-     * 设置到目标的距离来源（英寸），例如 {@code aim::getShotDistance}。
-     * 返回值 <= 0 视为无效，退回固定的 ACCELERATE_VEL。传 null 取消。
-     */
+
     public void setDistanceSupplier(DoubleSupplier distanceSupplier) {
         this.distanceSupplier = distanceSupplier;
     }
@@ -140,7 +120,6 @@ public class PollenShooterSubsystem extends SubsystemBase {
         return lastDistance;
     }
 
-    /** 按距离线性插值查射速表，再夹到 [MIN_SHOT_VEL, MAX_SHOT_VEL]。表无效时返回 ACCELERATE_VEL。 */
     public static double velocityForDistance(double distance) {
         double[] xs = SHOT_DIST_IN;
         double[] ys = SHOT_VEL;
@@ -202,7 +181,6 @@ public class PollenShooterSubsystem extends SubsystemBase {
         return error;
     }
 
-    /** 最近一次写给电机的功率（Hub 速度模式下为 0）。 */
     public double getPower() {
         return output;
     }
@@ -223,12 +201,10 @@ public class PollenShooterSubsystem extends SubsystemBase {
         return dTerm;
     }
 
-    /** 到速了没有，可以用来决定什么时候开门。 */
     public boolean isReady() {
         return commandedVel > 0 && Math.abs(commandedVel - measuredVel) < READY_TOLERANCE;
     }
 
-    /** 每个循环算一次功率写给电机；加入 CommandScheduler 后自动调用。 */
     @Override
     public void periodic() {
         updateControlMode();

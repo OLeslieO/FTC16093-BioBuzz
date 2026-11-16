@@ -15,23 +15,7 @@ import org.firstinspires.ftc.teamcode.subsystem.autoaim.AutoAimSubsystem;
 import org.firstinspires.ftc.teamcode.util.Alliance;
 import org.firstinspires.ftc.teamcode.util.FieldConstants;
 
-/**
- * 云台自动瞄准测试（红方）。
- *
- * <p><b>INIT 前：</b>车摆在 (START_X, START_Y)，车头朝 START_HEADING_DEG，
- * 云台手动摆到正前方（INIT 时会把这个位置当作云台零点）。
- *
- * <p>手柄 1：
- * <ul>
- *   <li>左摇杆：平移；右摇杆 X：转向；按住左肩键：慢速</li>
- *   <li>A：开 / 关自动瞄准</li>
- *   <li>Y：开 / 关边走边射</li>
- *   <li>X：把位姿重置回起点（车要先摆回起点）</li>
- *   <li>dpad 左：在两个瞄准点 (59, 59) / (59, 82.5) 之间切换</li>
- * </ul>
- *
- * <p>telemetry 同时发到 Driver Station 和 Panels。
- */
+
 @TeleOp(name = "AutoAim Test", group = "test")
 @Configurable
 public class AutoAimTest extends LinearOpMode {
@@ -40,9 +24,7 @@ public class AutoAimTest extends LinearOpMode {
     public static double START_Y = 8.0;
     public static double START_HEADING_DEG = 90.0;
 
-    /** 慢速模式下的底盘功率系数。 */
     public static double SLOW_SCALE = 0.35;
-    /** 三个摇杆都小于这个值时认为底盘在刹车，启用刹车预测。 */
     public static double BRAKE_STICK_THRESHOLD = 0.05;
 
     @Override

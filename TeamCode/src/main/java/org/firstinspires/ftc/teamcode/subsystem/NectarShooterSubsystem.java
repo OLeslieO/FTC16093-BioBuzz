@@ -52,7 +52,7 @@ public class NectarShooterSubsystem extends SubsystemBase {
      * 新测的点按距离从小到大插进去，两个数组长度要一样。
      */
     public static double[] SHOT_DIST_IN = {29.47, 33.21, 43.41};
-    public static double[] SHOT_VEL = {1700.0, 1840.0, 1940.0};
+    public static double[] SHOT_VEL = {1720.0, 1860.0, 1960.0};
     /** 超出表的范围时，是否沿两端那一段的斜率外推（否则取端点值）。 */
     public static boolean EXTRAPOLATE = true;
     /** 查表结果的上下限（ticks/s），防止外推太离谱。 */

@@ -16,24 +16,7 @@ import com.qualcomm.robotcore.util.Range;
 
 import java.util.List;
 
-/**
- * 自己算功率的 shooter 速度控制（不用 SDK 自带的 RUN_USING_ENCODER PIDF）。
- *
- * power = 电压补偿 × (kS + kV·target)          ← 前馈：负责"大概给多少功率"
- *       + kP·error + I + kD·(-dVel/dt)           ← 反馈：只修正剩下的误差
- *       （误差太大时直接 boost 满功率，快速回速）
- *
- * 调参顺序：
- *   1. kP = kI = kD = 0，boost 关掉。调 kV 让稳态速度≈目标（kS 一般 0.02~0.06）。
- *      不同目标速度都差不多准，前馈就对了。
- *   2. 加 kP，直到回速快但不振荡。
- *   3. 还有一点稳态误差再加一点 kI。kD 通常保持 0。
- *   4. 打开 boost，调 boostThreshold，让发射掉速后尽快回来。
- *
- * 所有参数在 Panels 里实时改，立即生效。
- * 手柄：右扳机 = 目标速度 / 松开 = 空转速度；A = intake；右肩键 = 开门；
- *       dpad_up/down 切换 pollen / nectar / 两个一起。
- */
+
 @TeleOp(name = "Test Shooter FF+PID", group = "test")
 @Configurable
 public class ShooterFFPIDTest extends LinearOpMode {

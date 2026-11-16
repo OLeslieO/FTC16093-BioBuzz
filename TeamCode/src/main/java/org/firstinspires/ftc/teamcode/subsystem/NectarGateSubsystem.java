@@ -23,8 +23,8 @@ public class NectarGateSubsystem extends SubsystemBase {
 
     public static String NECTAR_GATE_NAME = "nectarGate";
 
-    public static double NECTAR_SHOOT_POSITION = 0;
-    public static double NECTAR_STOP_POSITION = 0.33;
+    public static double NECTAR_SHOOT_POSITION = 0.3;
+    public static double NECTAR_STOP_POSITION = 0.08;
 
     private final Servo nectarGate;
 

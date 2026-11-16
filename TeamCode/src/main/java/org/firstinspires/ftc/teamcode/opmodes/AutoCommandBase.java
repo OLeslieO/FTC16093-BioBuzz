@@ -29,23 +29,7 @@ import org.firstinspires.ftc.teamcode.subsystem.autoaim.AutoAimSubsystem;
 import org.firstinspires.ftc.teamcode.util.Alliance;
 import org.firstinspires.ftc.teamcode.util.FieldConstants;
 
-/**
- * 所有自动程序的基类（参考 FTC2026-16093National 的 AutoCommandBase）。
- *
- * <p>子类只需要实现：
- * <ul>
- *   <li>{@link #getStartPose()}：起始位姿（可以按 {@code Alliance.get()} 返回红/蓝不同的点）</li>
- *   <li>{@link #runAutoCommand()}：整条自动流程（Ivy Command）</li>
- * </ul>
- *
- * <p>基类负责：建 follower、建好 shooter / transfer / nectarGate / intake / 自瞄、
- * INIT 阶段选联盟、START 时重新设起点并调度流程、每循环更新 follower → Ivy → 自瞄、
- * 结束时把位姿留给 TeleOp。
- *
- * <p>SolversLib 子系统的 periodic 由 {@code super.run()} 调用；路径/流程用 Ivy {@link Scheduler}。
- *
- * <p><b>INIT 时云台要朝正前方</b>（会把当前位置当作零点）。
- */
+
 public abstract class AutoCommandBase extends CommandOpModeEx {
 
     protected Follower follower;
@@ -59,21 +43,15 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
     protected IntakeSubsystem intake;
     protected AutoAimSubsystem aim;
 
-    /** 整条自动流程。在 START 时调用，此时联盟已经选好。 */
     public abstract Command runAutoCommand();
 
-    /** 起始位姿。INIT 和 START 时各设一次（START 时联盟已确定）。 */
     public abstract Pose getStartPose();
-
-    /** 子类额外初始化（在基类 initialize 之后调用），默认什么都不做。 */
     public void onInit() {
     }
 
-    /** 每个循环额外执行的逻辑 / telemetry（在 panelsTelemetry.update 之前），默认什么都不做。 */
     public void periodic() {
     }
 
-    /** 自动结束时调用（跑完或在 DS 上停止），默认什么都不做。 */
     public void onAutoStopped() {
     }
 
@@ -102,11 +80,8 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
         gate.stop();
         register(shooter, transfer, gate, intake);
 
-        // 自动用 pollen shooter 射球，云台按 pollen 的旋转轴几何瞄准
         AutoAimConfig.ACTIVE_TURRET = AutoAimConfig.Turret.POLLEN;
-        // 云台在 INIT 时朝正前方，当作零点
         aim = new AutoAimSubsystem(hardwareMap, out, follower::pose, follower::velocity, true);
-        // 射速按距离查表：自瞄有解时用射击距离，否则用到瞄准点的直线距离
         shooter.setDistanceSupplier(() -> aim.isEnabled() && aim.getShotDistance() > 0
                 ? aim.getShotDistance()
                 : Alliance.get().distanceToAim(follower.pose()));
@@ -208,13 +183,13 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
             }
         });
     }
+    protected Command stopTransfer() {
+        return instant(() -> {
+            transfer.setState(TransferSubsystem.State.STOP);
+            // 已经伸出就不再调 extend()，否则会把 flower 从 BOTTOM 拉回 MIDDLE
+        });
+    }
 
-    /**
-     * flower 放到 BOTTOM。
-     *
-     * <p>按联动规则 intake 必须已经放好（EXTENDED / MIDDLE），所以先等 intake 的放下延时走完再放；
-     * intake 是收着的就直接跳过（不会卡住流程）。
-     */
     protected Command flowerDown() {
         return sequential(
                 waitUntil(() -> intake.isDeployed()
@@ -242,8 +217,6 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
         return instant(() -> {
             shooter.stop();
             transfer.stop();
-            gate.stop();
-            aim.disable();
         });
     }
 

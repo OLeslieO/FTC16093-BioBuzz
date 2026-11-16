@@ -228,7 +228,8 @@ public class PPDriveSubsystem {
     }
 
     /**
-     * Restore the previously saved pose.
+     * Restore the previously saved pose, then clear it so the next OpMode
+     * does not pick up the same (stale) pose again.
      *
      * @return true if a pose was restored.
      */
@@ -238,6 +239,8 @@ public class PPDriveSubsystem {
         }
 
         setPose(transferredPose);
+        // 读完就清：只有紧跟在 auto 后面的那一次 TeleOp 会用到这个位姿
+        clearTransferredPose();
         return true;
     }
 

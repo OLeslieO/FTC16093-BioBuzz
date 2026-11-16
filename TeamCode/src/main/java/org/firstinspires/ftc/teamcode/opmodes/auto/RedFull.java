@@ -14,19 +14,8 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
 import org.firstinspires.ftc.teamcode.opmodes.AutoCommandBase;
 
-/**
- * 自动阶段：按 Pedro Pathing Visualizer 导出的路线依次跑完。
- *
- * <p>路线：start → shoot1/intake1 → shoot2（曲线）→ intake2 → intake3（两段）→ shoot3。
- * 路径由 Ivy 调度器执行；结束时把位姿存给 TeleOp。
- *
- * <p>发射：开局打开自动瞄准、shooter 加速、transfer 一直转（整个自动阶段都不停）；
- * 开局等 SPIN_UP_MS 后开门 PRELOAD_GATE_MS；到 SHOOT2 后开门 SHOOT2_GATE_MS；
- * 到 SHOOT3 后开门 SHOOT3_GATE_MS。子系统、循环、位姿传递都在 {@link AutoCommandBase} 里。
- *
- * <p><b>INIT 时云台要朝正前方</b>（会把当前位置当作零点）。
- */
-@Autonomous(name = "RedFull", group = "main")
+
+@Autonomous(name = "RedFull 2.5", group = "main")
 @Configurable
 public class RedFull extends AutoCommandBase {
 
@@ -35,13 +24,12 @@ public class RedFull extends AutoCommandBase {
     /** 开局预装球开门时间（毫秒）。 */
     public static double PRELOAD_GATE_MS = 2500;
     /** 到 SHOOT2 后开门时间（毫秒）。 */
-    public static double SHOOT2_GATE_MS = 2000;
+    public static double SHOOT2_GATE_MS = 2200;
     /** 到 SHOOT3 后开门时间（毫秒）。 */
-    public static double SHOOT3_GATE_MS = 2000;
+    public static double SHOOT3_GATE_MS = 2200;
     /** 到 SHOOT4 后开门时间（毫秒）。 */
-    public static double SHOOT4_GATE_MS = 2500;
+    public static double SHOOT4_GATE_MS = 2200;
 
-    // 点位都在 AutoConstants 里
 
     @Override
     public Pose getStartPose() {
@@ -61,9 +49,11 @@ public class RedFull extends AutoCommandBase {
                 flowerDown(),
                 waitMs(300),
                 follow(pollenPrep1ToPollen1()),
+                waitMs(1000),
+                follow(pollen1ToShoot2Prep()),
+                flowerUp(),
                 follow(shoot2PrepToShoot2()),
-                follow(shoot2PrepToShoot2()),
-                waitMs(200),
+                waitMs(300),
                 shoot(SHOOT2_GATE_MS),
 
                 follow(shoot2ToPollenPrep2()),
@@ -72,19 +62,21 @@ public class RedFull extends AutoCommandBase {
                 follow(pollenPrep2ToPollen2()),
                 waitMs(1000),
                 follow(pollen2ToShoot3()),
+                flowerUp(),
                 waitMs(500),
                 shoot(SHOOT3_GATE_MS),
 
                 follow(shoot3ToPollen3Prep()),
                 follow(pollen3PrepToPollen3()),
-                waitMs(400),
+                waitMs(700),
                 follow(pollen3ToShoot4()),
-                waitMs(500),
-                shoot(SHOOT4_GATE_MS)
+                waitMs(400),
+                shoot(SHOOT4_GATE_MS),
+                follow(park())
+
         );
     }
 
-    // ================= 路径（点位见 AutoConstants） =================
 
     public Path startToShoot1() {
         Pose a = START_BOTTOM.pose(), b = SHOOT_BOTTOM.pose(90);
@@ -137,6 +129,10 @@ public class RedFull extends AutoCommandBase {
     public Path pollen3ToShoot4() {
         Pose a = POLLEN_CORNER.pose(180), b = SHOOT_TOP.pose();
         return Paths.curve(a, CTRL_SHOOT_TOP_TO_CORNER_2.pose(), CTRL_SHOOT_TOP_TO_CORNER_1.pose(), b).linear(a, b);
+    }
+    public Path park() {
+        Pose a = SHOOT_TOP.pose(), b = PARK_TOP.pose();
+        return Paths.line(a, b).linear(a, b);
     }
 
 

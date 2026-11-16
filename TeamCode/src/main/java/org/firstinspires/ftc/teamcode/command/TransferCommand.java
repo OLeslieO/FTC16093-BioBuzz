@@ -4,11 +4,6 @@ import com.seattlesolvers.solverslib.command.CommandBase;
 
 import org.firstinspires.ftc.teamcode.subsystem.TransferSubsystem;
 
-/**
- * 按住期间让 transfer 保持指定状态，松开（命令结束或被打断）后回到 STOP。
- *
- * <p>配合 {@code whileHeld} 使用；电机功率由 {@link TransferSubsystem#periodic()} 每个循环写出。
- */
 public class TransferCommand extends CommandBase {
 
     private final TransferSubsystem transfer;

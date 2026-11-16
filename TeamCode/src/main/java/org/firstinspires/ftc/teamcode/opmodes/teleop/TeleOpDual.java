@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.opmodes;
+package org.firstinspires.ftc.teamcode.opmodes.teleop;
 
 import com.bylazar.configurables.annotations.Configurable;
 import com.bylazar.telemetry.JoinedTelemetry;
@@ -11,6 +11,7 @@ import com.seattlesolvers.solverslib.gamepad.GamepadEx;
 import com.seattlesolvers.solverslib.gamepad.GamepadKeys;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
+import org.firstinspires.ftc.teamcode.opmodes.CommandOpModeEx;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.subsystem.NectarGateSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.IntakeSubsystem;
@@ -25,12 +26,12 @@ import org.firstinspires.ftc.teamcode.util.Alliance;
 import org.firstinspires.ftc.teamcode.util.FieldConstants;
 
 /**
- * 双手柄版 {@link AutoAimTeleOp}：手柄 1 的操作完全一样，另外手柄 2 的左肩键也能 outtake。
+ * 双手柄版 {@link TeleOpSingle}：手柄 1 的操作完全一样，另外手柄 2 的左肩键也能 outtake。
  *
  * <p>自动瞄准需要场地位姿，所以底盘换成 Pedro 的 {@link PPDriveSubsystem}（robot-centric），
  * 不再用 DriveSubsystem（两个都开会抢同一组电机）。
  *
- * <p><b>INIT：</b>如果自动阶段存了位姿就沿用（云台编码器也不清零）；
+ * <p><b>INIT：</b>如果自动阶段存了位姿就沿用（云台编码器也不清零），读完就清掉，下次再开 TeleOp 不会再用；
  * 否则车摆在 (START_X, START_Y, START_HEADING_DEG)，云台手动摆到正前方当零点。
  * init 阶段 X 选蓝方，B 选红方。
  *
@@ -61,19 +62,16 @@ import org.firstinspires.ftc.teamcode.util.FieldConstants;
 @Configurable
 public class TeleOpDual extends CommandOpModeEx {
 
-    /** 慢速模式下的功率系数。 */
     public static double SLOW_SCALE = 0.35;
 
-    /** 右扳机超过这个值就开门送球。 */
     public static double GATE_TRIGGER_THRESHOLD = 0.5;
-    /** 左扳机超过这个值就 outtake。 */
     public static double OUTTAKE_TRIGGER_THRESHOLD = 0.5;
 
     /** 射 Pollen 时 transfer 送球功率。 */
     public static double POLLEN_FEED_POW = 1.0;
     /** 射 Nectar 时 transfer 送球功率。 */
     public static double NECTAR_FEED_POW = 0.9;
-    /** 右肩键吸球时 transfer 功率。 */
+    /** 吸球时 transfer 功率。 */
     public static double INTAKE_FEED_POW = 0.85;
 
     /** 切换 shooter 后第一次到达最低射速时手柄震动的时长（毫秒）。 */
@@ -93,7 +91,6 @@ public class TeleOpDual extends CommandOpModeEx {
     /** 没被选中的那个 shooter：true = IDLE 低速空转（切换后到速更快），false = STOP。 */
     public static boolean INACTIVE_SHOOTER_IDLE = true;
 
-    /** 开局是否自动打开自动瞄准。 */
     public static boolean AIM_ON_START = true;
 
     private Follower follower;
@@ -113,6 +110,8 @@ public class TeleOpDual extends CommandOpModeEx {
     private boolean waitingForSpeed = false;
     private GamepadEx driver;
     private Telemetry out;
+    /** INIT 时是否用了自动阶段传过来的位姿（读完开关就清掉了，所以单独记一下）。 */
+    private boolean fromAuto;
 
     @Override
     public void initialize() {
@@ -127,7 +126,7 @@ public class TeleOpDual extends CommandOpModeEx {
         follower = Constants.create(hardwareMap);
         drive = new PPDriveSubsystem(follower, out);
         drive.setRobotCentric(true);
-        boolean fromAuto = drive.restorePose();
+        fromAuto = drive.restorePose();
         if (!fromAuto) {
             drive.setPose(startPose());
         }
@@ -143,7 +142,6 @@ public class TeleOpDual extends CommandOpModeEx {
         nectarShooter = new NectarShooterSubsystem(hardwareMap);
         pollenShooter = new PollenShooterSubsystem(hardwareMap);
         intake = new IntakeSubsystem(hardwareMap);
-        // 射速按距离查表：自瞄开着用解算出的射击距离（边走边射时已含提前量），否则用到瞄准点的直线距离
         nectarShooter.setDistanceSupplier(() -> aim.isEnabled() && aim.getShotDistance() > 0
                 ? aim.getShotDistance()
                 : Alliance.get().distanceToAim(drive.getPose()));
@@ -164,18 +162,16 @@ public class TeleOpDual extends CommandOpModeEx {
         Pose p = drive.getPose();
         out.addData("Alliance", Alliance.get() + "（X 蓝 / B 红）");
         out.addData("Pose", "(%.1f, %.1f, %.1f°)", p.x(), p.y(), Math.toDegrees(p.heading()));
-        out.addData("Pose From Auto", PPDriveSubsystem.hasTransferredPose());
+        out.addData("Pose From Auto", fromAuto);
         out.addData("Turret Angle", "%.1f°", Math.toDegrees(aim.getTurretAngle()));
         out.update();
     }
 
     @Override
     public void functionalButtons() {
-        // Y：flower bottom ↔ middle（intake 没放下时忽略）
         driver.getGamepadButton(GamepadKeys.Button.Y)
                 .whenPressed(new InstantCommand(intake::toggleFlower, intake));
 
-        // A：intake middle ↔ retracted（flower 跟着按联动规则走）
         driver.getGamepadButton(GamepadKeys.Button.A)
                 .whenPressed(new InstantCommand(() -> {
                     if (intake.getTargetState() == IntakeSubsystem.State.RETRACTED) {
@@ -185,11 +181,9 @@ public class TeleOpDual extends CommandOpModeEx {
                     }
                 }, intake));
 
-        // dpad 下：重置底盘位姿
         driver.getGamepadButton(GamepadKeys.Button.DPAD_DOWN)
                 .whenPressed(new InstantCommand(() -> drive.setPose(startPose())));
 
-        // dpad 上：云台锁到 TURRET_HOLD_DEG / 恢复自动瞄准
         driver.getGamepadButton(GamepadKeys.Button.DPAD_UP)
                 .whenPressed(new InstantCommand(() -> {
                     if (aim.isHolding()) {
@@ -198,15 +192,11 @@ public class TeleOpDual extends CommandOpModeEx {
                         aim.holdAngle(Math.toRadians(TURRET_HOLD_DEG));
                     }
                 }));
-
-        // 左肩键：Pollen ↔ Nectar（瞄准云台 + 加速的 shooter 一起切）
         driver.getGamepadButton(GamepadKeys.Button.LEFT_BUMPER)
                 .whenPressed(new InstantCommand(() -> {
                     AutoAimConfig.toggleTurret();
                     updateShooterStates();
                 }));
-
-        // 右扳机、左扳机、右肩键每个循环在 updateFeed() 里直接读
     }
 
     @Override
@@ -215,18 +205,15 @@ public class TeleOpDual extends CommandOpModeEx {
         if (AIM_ON_START) {
             aim.enable();
         }
-        // 开局 intake 默认 middle：flower 先到 middle，延时后 intake 到 middle
         intake.middle();
     }
 
     @Override
     public void run() {
-        // 按当前云台同步 shooter 和送球（Panels 里直接改 ACTIVE_TURRET 也会生效）
         updateShooterStates();
         updateFeed();
         updateSpeedRumble();
 
-        // 按键命令 + intake / transfer / gate / shooter 的 periodic
         super.run();
 
         // ---- 底盘 ----

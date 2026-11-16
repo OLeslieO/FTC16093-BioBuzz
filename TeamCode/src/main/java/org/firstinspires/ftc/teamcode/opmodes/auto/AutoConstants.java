@@ -4,19 +4,9 @@ import com.bylazar.configurables.annotations.Configurable;
 import com.pedropathing.api.PoseFactory;
 import com.pedropathing.math.Pose;
 
-/**
- * 所有自动程序共用的点位（英寸 / 度，Pedro Visualizer 坐标，红方）。
- *
- * <p>同一个位置只写一次，几个自动都引用它，在 Panels 里改一处就全部生效。
- * 同一位置在不同路径里朝向不同时，{@code h} 是默认朝向，其它朝向在自动里用 {@link FieldPoint#pose(double)} 指定。
- *
- * <p>自动在 START 时才读这些值，所以 INIT 之后在 Panels 里改也来得及。
- * 控制点（CTRL_*）只用 x / y，朝向无意义。
- */
 @Configurable
 public class AutoConstants {
 
-    /** 一个可在 Panels 里调的点：x、y（英寸），h（度）。 */
     public static class FieldPoint {
         public double x;
         public double y;
@@ -28,12 +18,10 @@ public class AutoConstants {
             this.h = h;
         }
 
-        /** 用默认朝向 h。 */
         public Pose pose() {
             return pose(h);
         }
 
-        /** 同一位置，换个朝向（度）。 */
         public Pose pose(double headingDeg) {
             return POSE.of(x, y, headingDeg);
         }
@@ -48,14 +36,14 @@ public class AutoConstants {
     /** 上方起点：RedHalfTop。 */
     public static FieldPoint START_TOP = new FieldPoint(31.8, 133.823, -90);
     /** LeavePark 起点。 */
-    public static FieldPoint LEAVE_START = new FieldPoint(10.87, 136.73, -90);
+    public static FieldPoint LEAVE_START = new FieldPoint(11.38, 136.1, -90);
 
     // ================= 射球点 =================
 
     /** 下方射球点：朝向 90（开局）/ 180 / -90 都有用到。 */
     public static FieldPoint SHOOT_BOTTOM = new FieldPoint(55.84, 21.6, 90);
     /** 上方射球点：朝向 180 / -90 都有用到。 */
-    public static FieldPoint SHOOT_TOP = new FieldPoint(55.84, 118, 180);
+    public static FieldPoint SHOOT_TOP = new FieldPoint(58.19, 119.72, 180);
 
     // ================= 吸球点 =================
 
@@ -86,9 +74,8 @@ public class AutoConstants {
     /** RedHalfParkBottom 停车点。 */
     public static FieldPoint PARK_MID = new FieldPoint(10.0985, 92.0653, 90);
     /** LeavePark 终点。 */
-    public static FieldPoint LEAVE_END = new FieldPoint(10.55, 128.07, -90);
+    public static FieldPoint LEAVE_END = new FieldPoint(11.22, 128.07, -90);
 
-    // ================= 曲线控制点 =================
 
     /** START_TOP → SHOOT_TOP（RedHalfTop）。 */
     public static FieldPoint CTRL_START_TOP_TO_SHOOT_TOP = new FieldPoint(31.466, 119.2664, 0);
