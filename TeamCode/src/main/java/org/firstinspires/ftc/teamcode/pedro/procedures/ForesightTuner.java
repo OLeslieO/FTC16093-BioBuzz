@@ -520,7 +520,7 @@ class HeadingBraking extends TuningOpMode<List<Double>> {
                         drivetrain.stop();
 
                         double[] c = quadraticFit(velocityToBrakingDistance);
-                        coefficients = List.of(c[0], c[1]);
+                        coefficients = java.util.Arrays.asList(c[0], c[1]);
 
                         state = State.DONE;
                     } else {
@@ -776,7 +776,7 @@ class ForwardBraking extends TuningOpMode<List<Double>> {
 
         if (state == State.DONE) {
             double[] c = quadraticFit(velocityToBrakingDistance);
-            coefficients = List.of(c[0], c[1]);
+            coefficients = java.util.Arrays.asList(c[0], c[1]);
         }
 
         return coefficients;
@@ -945,7 +945,7 @@ class StrafeBraking extends TuningOpMode<List<Double>> {
 
         if (state == State.DONE) {
             double[] c = quadraticFit(velocityToBrakingDistance);
-            coefficients = List.of(c[0], c[1]);
+            coefficients = java.util.Arrays.asList(c[0], c[1]);
         }
 
         return coefficients;
@@ -1094,7 +1094,7 @@ class ForwardTranslational extends TuningOpMode<List<Double>> {
         double kP_small = calculatekP(ALPHA_SMALL);
 
         //  kP_large, kP_small, coast kV, and brake kV (scaled by aggressiveness factor)
-        return List.of(kP_large, kP_small, kV, kV * VEL_AGGRESSIVENESS);
+        return java.util.Arrays.asList(kP_large, kP_small, kV, kV * VEL_AGGRESSIVENESS);
     }
 
     private double calculatekP(double alpha) {
@@ -1211,7 +1211,7 @@ class StrafeTranslational extends TuningOpMode<List<Double>> {
         double kP_large = calculatekP(ALPHA_LARGE);
         double kP_small = calculatekP(ALPHA_SMALL);
 
-        return List.of(kP_large, kP_small);
+        return java.util.Arrays.asList(kP_large, kP_small);
     }
 
     private double calculatekP(double alpha) {

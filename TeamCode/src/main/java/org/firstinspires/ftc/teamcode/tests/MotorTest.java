@@ -1,25 +1,25 @@
 package org.firstinspires.ftc.teamcode.tests;
 
-import com.acmerobotics.dashboard.FtcDashboard;
-import com.acmerobotics.dashboard.config.Config;
-import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
+import com.bylazar.configurables.annotations.Configurable;
+import com.bylazar.telemetry.PanelsTelemetry;
+import com.bylazar.telemetry.TelemetryManager;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 
-import org.firstinspires.ftc.robotcore.external.Telemetry;
-
 @TeleOp(name = "motor test", group = "test")
-@Config
+@Configurable
 public class MotorTest extends LinearOpMode {
 
-    private final Telemetry telemetry_M =
-            new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
+    private final TelemetryManager panelsTelemetry = PanelsTelemetry.INSTANCE.getTelemetry();
     public static int encoder_position = 1150;
+    // motor0 沿用原参数名，motor1 用 _1 后缀；单电机模式只读 motor0 的值
     public static double max_power = 1;
+    public static double max_power_1 = 1;
     public static int shooterVelocity = 1000;
+    public static int shooterVelocity_1 = 1000;
     public static boolean read_only = false;
     public static boolean reverse_0 = false;
     public static boolean reverse_1 = false;
@@ -64,14 +64,18 @@ public class MotorTest extends LinearOpMode {
                         motor.setPower(0);
                     }
                 } else if (set_power_mode) {
-                    for (DcMotorEx motor : motors) {
-                        motor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-                        motor.setPower(max_power);
+                    for (int i = 0; i < motors.length; i++) {
+                        motors[i].setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+                        double power = i == 0 ? max_power : max_power_1;
+                        motors[i].setPower(Math.max(-1.0, Math.min(1.0, power)));
+                        panelsTelemetry.addData("power_cmd_" + i, power);
                     }
                 } else if (set_velocity_mode) {
-                    for (DcMotorEx motor : motors) {
-                        motor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-                        motor.setVelocity(shooterVelocity);
+                    for (int i = 0; i < motors.length; i++) {
+                        motors[i].setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+                        int velocity = i == 0 ? shooterVelocity : shooterVelocity_1;
+                        motors[i].setVelocity(velocity);
+                        panelsTelemetry.addData("velocity_cmd_" + i, velocity);
                     }
                 } else if (set_position_mode) {
                     for (int i = 1; i < motors.length; i++) {
@@ -80,18 +84,18 @@ public class MotorTest extends LinearOpMode {
                     motor0.setTargetPosition(encoder_position);
                     motor0.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                     motor0.setPower(Math.abs(max_power));
-                    telemetry_M.addData("position_target", encoder_position);
+                    panelsTelemetry.addData("position_target", encoder_position);
                 } else {
                     for (DcMotorEx motor : motors) {
                         motor.setPower(0);
                     }
                 }
                 for (int i = 0; i < motors.length; i++) {
-                    telemetry_M.addData("is busy_" + i, motors[i].isBusy());
-                    telemetry_M.addData("encoder_" + i, motors[i].getCurrentPosition());
-                    telemetry_M.addData("velocity_" + i, motors[i].getVelocity());
+                    panelsTelemetry.addData("is busy_" + i, motors[i].isBusy());
+                    panelsTelemetry.addData("encoder_" + i, motors[i].getCurrentPosition());
+                    panelsTelemetry.addData("velocity_" + i, motors[i].getVelocity());
                 }
-                telemetry_M.update();
+                panelsTelemetry.update(telemetry);
                 idle();
             }
         } finally {

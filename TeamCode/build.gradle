@@ -1,4 +1,21 @@
+buildscript {
+    repositories {
+        mavenCentral()
+        google()
+        maven { url = "https://repo.dairy.foundation/releases" }
+    }
+    dependencies {
+        classpath "dev.frozenmilk:Load:0.3.2"
+    }
+}
+
 apply plugin: 'com.android.application'
+apply plugin: 'dev.frozenmilk.sinister.sloth.load'
+
+// Sloth: don't auto-run "adb connect 192.168.43.1" on deploy (causes "more than one device" when USB is also plugged in)
+load {
+    autoconnect = dev.frozenmilk.sinister.sloth.AutoConnect.valueOf("NEVER")
+}
 
 //
 // build.gradle in TeamCode
@@ -31,9 +48,4 @@ dependencies {
     implementation project(':FtcRobotController')
     implementation "org.solverslib:core:0.3.6" // core
     implementation "org.solverslib:pedroPathing:0.3.6" // pedroPathing
-}
-repositories {
-    maven {
-        url "https://repo.dairy.foundation/releases"
-    }
 }

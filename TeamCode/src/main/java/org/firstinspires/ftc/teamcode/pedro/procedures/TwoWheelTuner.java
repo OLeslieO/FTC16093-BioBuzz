@@ -399,6 +399,6 @@ class TwoWheelOffsets extends TuningOpMode<List<Double>> {
             previous = localizer.pose();
         }
 
-        return List.of(((-previous.y()) / 2.0), ((-previous.x()) / 2.0));
+        return java.util.Arrays.asList(((-previous.y()) / 2.0), ((-previous.x()) / 2.0));
     }
 }

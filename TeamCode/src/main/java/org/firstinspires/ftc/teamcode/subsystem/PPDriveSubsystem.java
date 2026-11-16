@@ -1,11 +1,12 @@
 package org.firstinspires.ftc.teamcode.subsystem;
 
-import com.acmerobotics.dashboard.config.Config;
+import com.bylazar.configurables.annotations.Configurable;
 import com.pedropathing.controllers.PIDController;
 import com.pedropathing.drivetrain.DrivePowers;
 import com.pedropathing.follower.Follower;
 import com.pedropathing.follower.ManualDrive;
 import com.pedropathing.math.Pose;
+import com.pedropathing.math.Velocity;
 import com.pedropathing.utils.Angle;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
@@ -16,11 +17,11 @@ import static com.pedropathing.ivy.commands.Commands.infinite;
 
 import com.pedropathing.ivy.Command;
 
-@Config
+@Configurable
 public class PPDriveSubsystem {
 
 
-    // Dashboard Configuration
+    // Panels Configuration
     public static double headingKp = 1.75;
     public static double headingKi = 0.0;
     public static double headingKd = 0.09;
@@ -179,6 +180,11 @@ public class PPDriveSubsystem {
         return follower.pose();
     }
 
+    /** 场地坐标系速度：vx / vy（in/s）、omega（rad/s）。 */
+    public Velocity getVelocity() {
+        return follower.velocity();
+    }
+
     public void setPose(Pose pose) {
         Objects.requireNonNull(pose);
 
@@ -222,7 +228,8 @@ public class PPDriveSubsystem {
     }
 
     /**
-     * Restore the previously saved pose.
+     * Restore the previously saved pose, then clear it so the next OpMode
+     * does not pick up the same (stale) pose again.
      *
      * @return true if a pose was restored.
      */
@@ -232,6 +239,8 @@ public class PPDriveSubsystem {
         }
 
         setPose(transferredPose);
+        // 读完就清：只有紧跟在 auto 后面的那一次 TeleOp 会用到这个位姿
+        clearTransferredPose();
         return true;
     }
 

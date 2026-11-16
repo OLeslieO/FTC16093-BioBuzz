@@ -7,6 +7,10 @@ public abstract class CommandOpModeEx extends CommandOpMode {
 
     public abstract void functionalButtons();
 
+
+    public void initLoop() {
+    }
+
     @Override
     public void runOpMode() {
         try {
@@ -17,7 +21,10 @@ public abstract class CommandOpModeEx extends CommandOpMode {
             telemetry.addLine("Ready!");
             telemetry.update();
 
-            waitForStart();
+            while (!isStarted() && !isStopRequested()) {
+                initLoop();
+                idle();
+            }
             if (isStopRequested()) {
                 return;
             }

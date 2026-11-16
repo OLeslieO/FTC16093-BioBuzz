@@ -207,7 +207,7 @@ class ThreeWheelResolution extends TuningOpMode<List<Double>> {
         if (movement == 0.0) {
             return null;
         }
-        return List.of(Math.abs(movement / distance), movement < 0 ? Encoder.REVERSE : Encoder.FORWARD);
+        return java.util.Arrays.asList(Math.abs(movement / distance), movement < 0 ? Encoder.REVERSE : Encoder.FORWARD);
     }
 }
 
@@ -251,7 +251,7 @@ class ThreeWheelOffsets extends TuningOpMode<List<Double>> {
         if (position == null) {
             return null;
         }
-        return List.of(-position.x() / Math.PI, position.y() / Math.PI);
+        return java.util.Arrays.asList(-position.x() / Math.PI, position.y() / Math.PI);
     }
 }
 

@@ -205,6 +205,6 @@ class OTOSOffsets extends TuningOpMode<List<Double>> {
             return null;
         }
 
-        return List.of(-position.x() / 2.0, -position.y() / 2.0);
+        return java.util.Arrays.asList(-position.x() / 2.0, -position.y() / 2.0);
     }
 }

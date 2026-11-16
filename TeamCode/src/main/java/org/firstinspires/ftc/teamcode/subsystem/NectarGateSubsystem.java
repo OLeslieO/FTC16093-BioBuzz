@@ -1,0 +1,69 @@
+package org.firstinspires.ftc.teamcode.subsystem;
+
+import com.bylazar.configurables.annotations.Configurable;
+import com.qualcomm.robotcore.hardware.HardwareMap;
+import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.util.Range;
+import com.seattlesolvers.solverslib.command.SubsystemBase;
+
+/**
+ * Nectar 发射口挡板舵机，两档：SHOOT（打开放球）/ STOP（关闭挡球）。
+ *
+ * <p>档位值是 {@code public static}，可以在 Panels 里实时调，下一个循环生效。
+ */
+@Configurable
+public class NectarGateSubsystem extends SubsystemBase {
+
+    public enum State {
+        /** 打开，放球去发射。 */
+        SHOOT,
+        /** 关闭，挡住球。 */
+        STOP
+    }
+
+    public static String NECTAR_GATE_NAME = "nectarGate";
+
+    public static double NECTAR_SHOOT_POSITION = 0.3;
+    public static double NECTAR_STOP_POSITION = 0.08;
+
+    private final Servo nectarGate;
+
+    private State state = State.STOP;
+
+    public NectarGateSubsystem(HardwareMap hardwareMap) {
+        nectarGate = hardwareMap.get(Servo.class, NECTAR_GATE_NAME);
+    }
+
+    public void setState(State state) {
+        this.state = state;
+    }
+
+    public State getState() {
+        return state;
+    }
+
+    public void shoot() {
+        setState(State.SHOOT);
+    }
+
+    public void stop() {
+        setState(State.STOP);
+    }
+
+    /** 当前档位对应的舵机位置。 */
+    public double getTargetPosition() {
+        switch (state) {
+            case SHOOT:
+                return NECTAR_SHOOT_POSITION;
+            case STOP:
+            default:
+                return NECTAR_STOP_POSITION;
+        }
+    }
+
+    /** 每个循环把当前档位写给舵机；加入 CommandScheduler 后自动调用。 */
+    @Override
+    public void periodic() {
+        nectarGate.setPosition(Range.clip(getTargetPosition(), 0.0, 1.0));
+    }
+}
