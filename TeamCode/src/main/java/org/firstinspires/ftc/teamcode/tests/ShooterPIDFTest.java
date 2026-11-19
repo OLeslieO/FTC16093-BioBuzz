@@ -20,15 +20,11 @@ public class ShooterPIDFTest extends LinearOpMode {
     // ticks/s
     public static double SHOOT_VEL = 1840;
     public static double IDLE_VEL = 1000;
-    // 0 = pollen, 1 = nectar, 2 = both
     public static int shooterSelect = 0;
-    // true = 自己算功率；false = Hub 自带速度控制
     public static boolean USE_PID = true;
-    // 功率 / (ticks/s) 误差
     public static double VELOCITY_P = 0.006;
     public static double VELOCITY_I = 0;
     public static double VELOCITY_D = 0;
-    // 前馈 = VELOCITY_F × 目标 ticks/s，起点 ≈ 1 / 满功率速度
     public static boolean USE_F = true;
     public static double VELOCITY_F = 0.00049;
     public static double AT_SPEED_TOLERANCE = 60;
@@ -101,7 +97,6 @@ public class ShooterPIDFTest extends LinearOpMode {
         intake1.setPower(0);
     }
 
-    /** 单个飞轮的 PID + F 控制器。参数读外层静态字段，Panels 改了立刻生效。 */
     private static class FlywheelController {
         private final DcMotorEx motor;
         private final ElapsedTime loopTimer = new ElapsedTime();
@@ -112,7 +107,6 @@ public class ShooterPIDFTest extends LinearOpMode {
         private boolean hasPreviousError;
         private boolean usingPid;
         private boolean usingF;
-        // 仅 telemetry
         private double error, feedforward, pTerm, iTerm, dTerm, output;
 
         FlywheelController(DcMotorEx motor) {
@@ -148,7 +142,6 @@ public class ShooterPIDFTest extends LinearOpMode {
         void periodic() {
             updateControlMode();
             if (commandedVel == 0.0) {
-                // 停着的时候也显示真实速度（飞轮还在滑行）
                 measuredVel = motor.getVelocity();
                 return;
             }
@@ -158,7 +151,6 @@ public class ShooterPIDFTest extends LinearOpMode {
                 return;
             }
             if (usingF != USE_F) {
-                // 积分是按旧前馈积出来的，重新开始
                 usingF = USE_F;
                 resetController();
             }
@@ -174,7 +166,6 @@ public class ShooterPIDFTest extends LinearOpMode {
             double candidateIntegral = integral + error * dt;
             double trial = base + VELOCITY_I * candidateIntegral;
 
-            // 只在没饱和、或误差在把输出往回拉时才积分
             if ((trial >= -1.0 && trial <= 1.0)
                     || (trial > 1.0 && error < 0.0)
                     || (trial < -1.0 && error > 0.0)) {
@@ -206,7 +197,6 @@ public class ShooterPIDFTest extends LinearOpMode {
             if (usingPid == USE_PID) {
                 return;
             }
-            // 先用旧模式停下再切换（包括 Panels 里实时改）
             if (usingPid) {
                 motor.setPower(0.0);
             } else {

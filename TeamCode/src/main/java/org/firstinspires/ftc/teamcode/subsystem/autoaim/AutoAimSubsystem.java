@@ -18,34 +18,7 @@ import org.firstinspires.ftc.teamcode.util.Alliance;
 import java.util.Objects;
 import java.util.function.Supplier;
 
-/**
- * 云台自动瞄准（支持边走边射）。执行机构是两个 Axon MAX MK2 CR 舵机，
- * 角度由外置 REV Through Bore 编码器读取。：根据机器人在场地上的 Pedro 位姿和速度，把云台转向
- * {@link Alliance#getAimPose()}（即 {@code FieldConstants} 里的瞄准点）。
- *
- * <p>每个循环调用一次 {@link #update()}（或用 {@link #periodic()} 交给 Ivy）。
- * 位姿和速度由构造时传入的 supplier 提供，例如 {@code drive::getPose, drive::getVelocity}。
- * 速度必须是场地坐标系（Pedro 的 {@code follower.velocity()} 就是）。
- *
- * <p>每帧的计算流程：
- * <ol>
- *   <li>读云台角度 / 角速度（外置 Through Bore 编码器）</li>
- *   <li>底盘速度 / 加速度滤波；司机松摇杆时用刹车减速度预测（{@link ChassisMotionPredictor}）</li>
- *   <li>预测"出射时刻"的位姿：往前推 定位延迟 + 机械开火延迟（边走边射关闭时只推定位延迟）</li>
- *   <li>边走边射：虚拟目标 = 真实目标 − 出射点速度 × 滞空时间，滞空时间按距离查表并迭代</li>
- *   <li>云台目标角 = 指向虚拟目标的场地角 − 出射时 heading，在机械范围内选最近的等价角度</li>
- *   <li>速度前馈 = 视线角速度 − 底盘角速度：底盘怎么动，云台就提前反向补偿</li>
- *   <li>位置环输出目标角速度，再经 kS / kV / kA 前馈 + 速度环换算成功率，同时发给两个 CR 舵机</li>
- * </ol>
- *
- * <p>需要你提供的实机参数（都在 {@link AutoAimConfig}，Panels 可调）：
- * <ul>
- *   <li>两个 CR 舵机名和方向、编码器端口名和方向、减速比、零位、机械限位、旋转轴偏移</li>
- *   <li>舵机特性 kS / kV / KP_VEL（用 TurretServoTest 整定，换算成 rad/s）</li>
- *   <li>刹车减速度 FORWARD / LATERAL_BRAKE_DECEL</li>
- *   <li>机械开火延迟 SHOOT_DELAY、滞空时间表 FLIGHT_DIST_IN / FLIGHT_TIME_SEC</li>
- * </ul>
- */
+
 public class AutoAimSubsystem {
 
     private final CRServo[] servos;
@@ -56,7 +29,6 @@ public class AutoAimSubsystem {
     private final ChassisMotionPredictor predictor = new ChassisMotionPredictor();
 
     private boolean enabled = false;
-    /** 固定角度模式：云台锁在 holdAngle（相对车头），优先于自动瞄准。 */
     private boolean holding = false;
     private double holdAngle = 0.0;
     private boolean shootOnTheMove = false;
@@ -81,11 +53,7 @@ public class AutoAimSubsystem {
     private boolean reachable = true;
     private boolean locked = false;
 
-    /**
-     * @param velocitySupplier 场地坐标系速度（in/s，rad/s），例如 {@code follower::velocity}
-     * @param resetEncoder     true = 把当前云台位置当作零点；
-     *                         自动阶段之后进手动阶段时传 false，沿用自动阶段的编码器读数
-     */
+
     public AutoAimSubsystem(
             HardwareMap hardwareMap,
             Telemetry telemetry,
@@ -103,7 +71,6 @@ public class AutoAimSubsystem {
         };
         applyServoDirections();
 
-        // Through Bore 插在电机端口上，只读编码器，不给这个端口输出功率
         encoder = hardwareMap.get(DcMotorEx.class, AutoAimConfig.ENCODER_NAME);
         if (resetEncoder) {
             encoder.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
@@ -112,16 +79,11 @@ public class AutoAimSubsystem {
         encoder.setPower(0.0);
     }
 
-    // ---------------------------------------------------------------
-    // 开关 / 输入
-    // ---------------------------------------------------------------
-
     public void enable() {
         enabled = true;
         resetFilters();
     }
 
-    /** 停止瞄准并让云台停下。 */
     public void disable() {
         enabled = false;
         holding = false;
@@ -134,10 +96,7 @@ public class AutoAimSubsystem {
         return enabled;
     }
 
-    /**
-     * 把云台锁在相对车头的固定角度（弧度），暂停自动瞄准。
-     * 用同一套位置环 / 速度环，只是目标角固定、没有前馈。{@link #releaseHold()} 恢复。
-     */
+
     public void holdAngle(double angleRad) {
         if (!holding) {
             resetFilters();
@@ -145,10 +104,9 @@ public class AutoAimSubsystem {
         holding = true;
         holdAngle = angleRad;
         locked = false;
-        shot = null; // 射速按直线距离查表，不用过期的解算结果
+        shot = null;
     }
 
-    /** 退出固定角度模式；自动瞄准开着就继续瞄准，否则云台停下。 */
     public void releaseHold() {
         if (!holding) {
             return;
@@ -165,7 +123,6 @@ public class AutoAimSubsystem {
         return holding;
     }
 
-    /** 开启后计算边走边射的提前量；关闭时直接瞄真实目标。 */
     public void setShootOnTheMove(boolean shootOnTheMove) {
         this.shootOnTheMove = shootOnTheMove;
     }
@@ -174,61 +131,41 @@ public class AutoAimSubsystem {
         return shootOnTheMove;
     }
 
-    /**
-     * 告诉子系统底盘正在刹车（例如手动阶段摇杆回中、自动阶段路径结束），
-     * 用来启用刹车预测。每个循环更新一次。
-     */
+
     public void setBraking(boolean braking) {
         this.braking = braking;
     }
 
-    // ---------------------------------------------------------------
-    // 状态
-    // ---------------------------------------------------------------
 
-    /** 云台当前相对机器人正前方的角度（弧度）。 */
     public double getTurretAngle() {
         return encoderSign() * ticksToRadians(encoder.getCurrentPosition())
                 + Math.toRadians(AutoAimConfig.ZERO_OFFSET_DEG);
     }
 
-    /** 云台当前角速度（rad/s）。 */
     public double getTurretVelocity() {
         return encoderSign() * ticksToRadians(encoder.getVelocity());
     }
 
-    /**
-     * 是否可以开火：目标在机械范围内、角度误差在容差内、云台转速跟上了底盘、底盘速度不超限。
-     */
+
     public boolean isLocked() {
         return enabled && locked;
     }
 
-    /**
-     * 出射点到（虚拟）目标的距离（英寸）。射速 / 俯仰请按这个距离查表，
-     * 边走边射时它已经包含了提前量。
-     */
+
     public double getShotDistance() {
         return shot != null ? shot.distance : 0.0;
     }
 
-    /** 当前解算出的滞空时间（秒）。 */
     public double getFlightTime() {
         return shot != null ? shot.flightTime : 0.0;
     }
 
-    /** 云台实际瞄准的场地坐标（边走边射时是虚拟目标）。 */
     public Pose getVirtualTarget() {
         return shot != null
                 ? new Pose(shot.virtualX, shot.virtualY, 0.0)
                 : Alliance.get().getAimPose();
     }
 
-    // ---------------------------------------------------------------
-    // 更新
-    // ---------------------------------------------------------------
-
-    /** 每个 OpMode 循环调用一次。 */
     public void update() {
         if (holding) {
             runHold();
