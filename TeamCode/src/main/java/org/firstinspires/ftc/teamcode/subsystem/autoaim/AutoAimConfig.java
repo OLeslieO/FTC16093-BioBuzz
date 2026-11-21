@@ -14,13 +14,14 @@ public class AutoAimConfig {
     public static boolean SERVO_REVERSED_1 = false;
 
     /** Through Bore 电机端口 */
-    public static String ENCODER_NAME = "intake1";
+    public static String ENCODER_NAME = "preShooter";
 
     public static boolean ENCODER_REVERSED = false;
 
     public static double ENCODER_CPR = 8192.0;
 
-    public static double ENCODER_TO_TURRET = 0.14814815;
+    public static double ENCODER_TO_TURRET = 0.569;
+    // servo 3/ turret 4
 
     public static double ticksPerTurretRev() {
         return ENCODER_CPR / ENCODER_TO_TURRET;
@@ -28,60 +29,38 @@ public class AutoAimConfig {
 
     public static double ZERO_OFFSET_DEG = 0.0;
 
-    public static double MIN_ANGLE_DEG = -100.0;
-    public static double MAX_ANGLE_DEG = 100.0;
+    public static double MIN_ANGLE_DEG = -160.0;
+    public static double MAX_ANGLE_DEG = 160.0;
 
     public static double LIMIT_MARGIN_DEG = 3.0;
 
-    public enum Turret {
-        NECTAR,
-        POLLEN
-    }
-
-    public static Turret ACTIVE_TURRET = Turret.NECTAR;
-
-    public static double NECTAR_PIVOT_OFFSET_FORWARD_IN = -1.033;
-
-    public static double NECTAR_PIVOT_OFFSET_LEFT_IN = -2.44;
-
-    public static double POLLEN_PIVOT_OFFSET_FORWARD_IN = 2.75591;
-
-    public static double POLLEN_PIVOT_OFFSET_LEFT_IN = 4.72441;
-
-    public static double pivotOffsetForwardIn() {
-        return ACTIVE_TURRET == Turret.POLLEN ? POLLEN_PIVOT_OFFSET_FORWARD_IN : NECTAR_PIVOT_OFFSET_FORWARD_IN;
-    }
-
-    public static double pivotOffsetLeftIn() {
-        return ACTIVE_TURRET == Turret.POLLEN ? POLLEN_PIVOT_OFFSET_LEFT_IN : NECTAR_PIVOT_OFFSET_LEFT_IN;
-    }
-
-    public static void toggleTurret() {
-        ACTIVE_TURRET = ACTIVE_TURRET == Turret.NECTAR ? Turret.POLLEN : Turret.NECTAR;
-    }
+    /** 云台旋转轴相对底盘旋转中心的偏移（英寸）。旋转轴就在底盘旋转中心上方，所以是 0。 */
+    public static double PIVOT_OFFSET_FORWARD_IN = 0.0;
+    public static double PIVOT_OFFSET_LEFT_IN = 0.0;
 
     public static double YAW_TRIM_DEG = 0.0;
 
 
-    public static double KP_POS = 3.0;
+    public static double KP_POS = 1.4;
 
-    public static double MAX_TURRET_VEL = 2.269;
+    public static double MAX_TURRET_VEL = 2.269; // TurretServoTest MAX_VEL_DPS 130°/s ÷ 57.3
 
-    public static double DEADBAND_DEG = 0.6;
+    public static double DEADBAND_DEG = 0.5;
 
 
-    public static double kS = 0.14;
+    public static double kS = 0.13;
 
-    public static double kV = 0.11;
+    public static double kV = 0.01; // TurretServoTest 0.006 /(°/s) × 57.3
 
     public static double kA = 0.0;
 
-    public static double KS_RAMP_VEL = 0.15;
+    /** 速度指令（rad/s）超过这个值才加 kS。= TurretServoTest 的 KS_MIN_VEL_DPS 3.6°/s ÷ 57.3 */
+    public static double KS_MIN_VEL = 0.063;
 
 
     public static double FF_DEADBAND = 0.05;
 
-    public static double KP_VEL = 0.06;
+    public static double KP_VEL = 0.086; // TurretServoTest 0.0015 /(°/s) × 57.3
 
     public static double VEL_FILTER_ALPHA = 0.5;
 

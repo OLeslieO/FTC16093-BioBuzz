@@ -17,25 +17,23 @@ public class TransferSubsystem extends SubsystemBase {
         CUSTOM
     }
 
-    public static String INTAKE_MOTOR_NAME_0 = "intake";
-    public static String INTAKE_MOTOR_NAME_1 = "intake1";
-
+    public static String INTAKE_MOTOR_NAME = "intake";
     public static double INTAKE_POW = 1;
     public static double OUTAKE_POW = -0.9;
     public static double SHOOT_POW = 0.85;
     public static double STOP_POW = 0.0;
 
-    private final DcMotorEx intake0, intake1;
+    private final DcMotorEx intake;
+    private final DcMotorEx preShooter;
 
     private State state = State.STOP;
     private double customPower = 0.0;
 
     public TransferSubsystem(HardwareMap hardwareMap) {
-        intake0 = hardwareMap.get(DcMotorEx.class, INTAKE_MOTOR_NAME_0);
-        intake0.setDirection(DcMotorSimple.Direction.FORWARD);
-        intake1 = hardwareMap.get(DcMotorEx.class, INTAKE_MOTOR_NAME_1);
-        intake1.setDirection(DcMotorSimple.Direction.REVERSE);
-
+        intake = hardwareMap.get(DcMotorEx.class, INTAKE_MOTOR_NAME);
+        intake.setDirection(DcMotorSimple.Direction.FORWARD);
+        preShooter = hardwareMap.get(DcMotorEx.class,"preShooter");
+        preShooter.setDirection(DcMotorSimple.Direction.FORWARD);
     }
 
     public void setState(State state) {
@@ -83,7 +81,7 @@ public class TransferSubsystem extends SubsystemBase {
     @Override
     public void periodic() {
         double power = getTargetPower();
-        intake0.setPower(power);
-        intake1.setPower(power);
+        intake.setPower(power);
+        preShooter.setPower(power);
     }
 }

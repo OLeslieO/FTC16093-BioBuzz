@@ -13,6 +13,9 @@ import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
 
+import org.firstinspires.ftc.teamcode.subsystem.GateSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.ShooterSubsystem;
+
 import java.util.List;
 
 
@@ -39,21 +42,22 @@ public class ShooterPIDTest extends LinearOpMode {
             hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL);
         }
 
-        DcMotorEx pollen = hardwareMap.get(DcMotorEx.class, "PollenShooter");
-        DcMotorEx nectar = hardwareMap.get(DcMotorEx.class, "NectarShooter");
-        Servo pollenGate = hardwareMap.get(Servo.class, "pollenGate");
-        Servo nectarGate = hardwareMap.get(Servo.class, "nectarGate");
+        DcMotorEx shooterUp = hardwareMap.get(DcMotorEx.class, ShooterSubsystem.SHOOTER_UP_NAME);
+        DcMotorEx shooterDown = hardwareMap.get(DcMotorEx.class, ShooterSubsystem.SHOOTER_DOWN_NAME);
+        Servo gate = hardwareMap.get(Servo.class, GateSubsystem.GATE_NAME);
         DcMotorEx intake = hardwareMap.get(DcMotorEx.class, "intake");
-        DcMotorEx intake1 = hardwareMap.get(DcMotorEx.class, "intake1");
+        DcMotorEx preShooter = hardwareMap.get(DcMotorEx.class, "preShooter");
 
-        for (DcMotorEx m : new DcMotorEx[]{pollen, nectar}) {
-            m.setDirection(DcMotorSimple.Direction.REVERSE);
+        // 两个电机同时用、方向相反
+        shooterUp.setDirection(DcMotorSimple.Direction.REVERSE);
+        shooterDown.setDirection(DcMotorSimple.Direction.FORWARD);
+        for (DcMotorEx m : new DcMotorEx[]{shooterUp, shooterDown}) {
             m.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
             m.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
             m.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         }
         intake.setDirection(DcMotorSimple.Direction.FORWARD);
-        intake1.setDirection(DcMotorSimple.Direction.REVERSE);
+        preShooter.setDirection(DcMotorSimple.Direction.REVERSE);
 
         telemetry.addLine("PID shooter test ready");
         telemetry.update();
@@ -66,9 +70,9 @@ public class ShooterPIDTest extends LinearOpMode {
 
             double targetVelocity = gamepad1.right_trigger > 0.5 ? shooterTargetVelocity : shooterIdleVelocity;
             resetOnTargetChange(targetVelocity);
-            double pollenVelocity = pollen.getVelocity();
-            double nectarVelocity = nectar.getVelocity();
-            double currentVelocity = (pollenVelocity + nectarVelocity) / 2.0;
+            double upVelocity = shooterUp.getVelocity();
+            double downVelocity = shooterDown.getVelocity();
+            double currentVelocity = (upVelocity + downVelocity) / 2.0;
             double dt = Math.max(loopTimer.seconds(), 0.001);
             loopTimer.reset();
 
@@ -81,25 +85,21 @@ public class ShooterPIDTest extends LinearOpMode {
                     + shooterI * integral
                     + shooterD * derivative;
             double power = Range.clip(output, -1.0, 1.0);
-            pollen.setPower(power);
-            nectar.setPower(power);
+            shooterUp.setPower(power);
+            shooterDown.setPower(power);
 
             double intakePower = gamepad1.a ? transferPower : 0;
             intake.setPower(intakePower);
-            intake1.setPower(intakePower);
+            preShooter.setPower(intakePower);
 
-            if (gamepad1.right_bumper) {
-                nectarGate.setPosition(0);
-                pollenGate.setPosition(0.5);
-            } else {
-                nectarGate.setPosition(0.33);
-                pollenGate.setPosition(0.8);
-            }
+            gate.setPosition(gamepad1.right_bumper
+                    ? GateSubsystem.SHOOT_POSITION
+                    : GateSubsystem.STOP_POSITION);
 
             panelsTelemetry.addData("Target Velocity", targetVelocity);
             panelsTelemetry.addData("Average Velocity", currentVelocity);
-            panelsTelemetry.addData("Pollen Velocity", pollenVelocity);
-            panelsTelemetry.addData("Nectar Velocity", nectarVelocity);
+            panelsTelemetry.addData("Up Velocity", upVelocity);
+            panelsTelemetry.addData("Down Velocity", downVelocity);
             panelsTelemetry.addData("Error (scaled)", error);
             panelsTelemetry.addData("Integral", integral);
             panelsTelemetry.addData("Derivative", derivative);
@@ -108,10 +108,10 @@ public class ShooterPIDTest extends LinearOpMode {
             panelsTelemetry.update(telemetry);
         }
 
-        pollen.setPower(0);
-        nectar.setPower(0);
+        shooterUp.setPower(0);
+        shooterDown.setPower(0);
         intake.setPower(0);
-        intake1.setPower(0);
+        preShooter.setPower(0);
     }
 
     private void resetOnTargetChange(double targetVelocity) {

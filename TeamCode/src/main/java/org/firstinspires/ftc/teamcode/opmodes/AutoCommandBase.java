@@ -18,13 +18,11 @@ import com.pedropathing.paths.Path;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
-import org.firstinspires.ftc.teamcode.subsystem.IntakeSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.FlowerSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.PPDriveSubsystem;
-import org.firstinspires.ftc.teamcode.subsystem.PollenGateSubsystem;
-import org.firstinspires.ftc.teamcode.subsystem.NectarShooterSubsystem;
-import org.firstinspires.ftc.teamcode.subsystem.PollenShooterSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.GateSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.ShooterSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.TransferSubsystem;
-import org.firstinspires.ftc.teamcode.subsystem.autoaim.AutoAimConfig;
 import org.firstinspires.ftc.teamcode.subsystem.autoaim.AutoAimSubsystem;
 import org.firstinspires.ftc.teamcode.util.Alliance;
 import org.firstinspires.ftc.teamcode.util.FieldConstants;
@@ -36,11 +34,11 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
     protected TelemetryManager panelsTelemetry;
     protected Telemetry out;
 
-    protected PollenShooterSubsystem shooter;
+    protected ShooterSubsystem shooter;
     protected TransferSubsystem transfer;
-    protected PollenGateSubsystem gate;
+    protected GateSubsystem gate;
 
-    protected IntakeSubsystem intake;
+    protected FlowerSubsystem intake;
     protected AutoAimSubsystem aim;
 
     public abstract Command runAutoCommand();
@@ -70,17 +68,16 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
         follower.setPose(getStartPose());
         follower.update();
 
-        shooter = new PollenShooterSubsystem(hardwareMap);
+        shooter = new ShooterSubsystem(hardwareMap);
         transfer = new TransferSubsystem(hardwareMap);
-        gate = new PollenGateSubsystem(hardwareMap);
-        intake = new IntakeSubsystem(hardwareMap);
+        gate = new GateSubsystem(hardwareMap);
+        intake = new FlowerSubsystem(hardwareMap);
         // init 时先停着，按 START 再动
         shooter.stop();
         transfer.stop();
         gate.stop();
         register(shooter, transfer, gate, intake);
 
-        AutoAimConfig.ACTIVE_TURRET = AutoAimConfig.Turret.POLLEN;
         aim = new AutoAimSubsystem(hardwareMap, out, follower::pose, follower::velocity, true);
         shooter.setDistanceSupplier(() -> aim.isEnabled() && aim.getShotDistance() > 0
                 ? aim.getShotDistance()
@@ -108,8 +105,6 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
         follower.update();
         // 按起点所在半场选红方瞄准点（下半场 0 号，上半场 1 号），之后每个循环按 y 自动切
         FieldConstants.AIM_POINT_INDEX = FieldConstants.aimPointIndexForY(follower.pose().y());
-        // 开局：flower 先到 MIDDLE，DEPLOY_DELAY_MS 后 intake 到 EXTENDED（和 TeleOp 按 A 一样）
-        intake.extend();
         Scheduler.schedule(runAutoCommand());
     }
 
@@ -177,30 +172,22 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
             aim.enable();
             shooter.accelerate();
             transfer.setState(TransferSubsystem.State.INTAKE);
-            // 已经伸出就不再调 extend()，否则会把 flower 从 BOTTOM 拉回 MIDDLE
-            if (intake.getTargetState() != IntakeSubsystem.State.EXTENDED) {
-                intake.extend();
-            }
         });
     }
     protected Command stopTransfer() {
         return instant(() -> {
             transfer.setState(TransferSubsystem.State.STOP);
-            // 已经伸出就不再调 extend()，否则会把 flower 从 BOTTOM 拉回 MIDDLE
         });
     }
 
+    /** flower 伸出。 */
     protected Command flowerDown() {
-        return sequential(
-                waitUntil(() -> intake.isDeployed()
-                        || intake.getTargetState() == IntakeSubsystem.State.RETRACTED),
-                instant(intake::flowerDown)
-        );
+        return instant(intake::extend);
     }
 
-    /** flower 升回 MIDDLE，intake 保持原档位不动。 */
+    /** flower 收回。 */
     protected Command flowerUp() {
-        return instant(intake::flowerUp);
+        return instant(intake::retract);
     }
 
     /** 射球 ms 毫秒再关上。 */

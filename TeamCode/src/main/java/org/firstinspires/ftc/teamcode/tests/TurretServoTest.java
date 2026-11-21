@@ -21,7 +21,7 @@ public class TurretServoTest extends LinearOpMode {
     public static String SERVO_NAME_0 = "lala1";
     public static String SERVO_NAME_1 = "lala2";
     /** Through Bore 插在哪个电机端口，就填那个电机在配置里的名字。不会给这个端口输出功率。 */
-    public static String ENCODER_NAME = "intake1";
+    public static String ENCODER_NAME = "preShooter";
 
     /** 每个舵机单独设方向（START 后实时生效）。两个舵机对着同一个齿轮装时，通常有一个要反转。 */
     public static boolean SERVO_REVERSED_0 = false;
@@ -33,7 +33,7 @@ public class TurretServoTest extends LinearOpMode {
      * 编码器轴转一圈，云台转几圈。编码器装在云台轴上 = 1.0；
      * 装在舵机轴上 = 1 / 3.375。
      */
-    public static double ENCODER_TO_TURRET = 0.14814815;
+    public static double ENCODER_TO_TURRET = 0.571;
 
     // ---- 模式 ----
     public static int MODE = 0;
@@ -44,13 +44,13 @@ public class TurretServoTest extends LinearOpMode {
     public static double STEP_PERIOD = 2.0;
 
     // ---- 限位（云台角度，相对正前方）----
-    public static double MIN_ANGLE_DEG = -125.0;
-    public static double MAX_ANGLE_DEG = 125.0;
+    public static double MIN_ANGLE_DEG = -160.0;
+    public static double MAX_ANGLE_DEG = 160.0;
     public static double LIMIT_MARGIN_DEG = 3.0;
 
     // ---- 控制参数（角度单位：度）----
     /** 位置环：速度指令 (°/s) = KP_POS × 误差 (°)。 */
-    public static double KP_POS = 3;
+    public static double KP_POS = 1.4;
     public static double DEADBAND_DEG = 0.5;
     /** 速度指令上限 (°/s)。Axon MAX 6V 空载约 520°/s，经 3.375 减速约 150°/s，留余量。 */
     public static double MAX_VEL_DPS = 130.0;
@@ -59,9 +59,9 @@ public class TurretServoTest extends LinearOpMode {
     /** 功率 / (°/s)。按满功率约 150°/s 估算的初值，需要实测。 */
     public static double kV = 0.006;
     /** 速度指令高于这个值才加 kS (°/s)，避免在目标附近来回抖。 */
-    public static double KS_MIN_VEL_DPS = 2.0;
+    public static double KS_MIN_VEL_DPS = 3.6;
     /** 速度环 P：功率 / (°/s)。 */
-    public static double KP_VEL = 0.0022;
+    public static double KP_VEL = 0.0015;
     /** 速度测量低通（0~1，越大越跟手、噪声越大）。 */
     public static double VEL_FILTER_ALPHA = 0.5;
     public static double MAX_POWER = 1.0;

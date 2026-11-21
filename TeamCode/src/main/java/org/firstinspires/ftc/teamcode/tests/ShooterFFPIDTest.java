@@ -14,6 +14,9 @@ import com.qualcomm.robotcore.hardware.VoltageSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
 
+import org.firstinspires.ftc.teamcode.subsystem.GateSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.ShooterSubsystem;
+
 import java.util.List;
 
 
@@ -44,9 +47,6 @@ public class ShooterFFPIDTest extends LinearOpMode {
     public static double velocityFilterAlpha = 0.6; // 1 = 不滤波；越小越平滑但越滞后
     public static double readyTolerance = 40;       // 误差在这范围内算"到速"
 
-    // 0 = pollen, 1 = nectar, 2 = both
-    public static int shooterSelect = 2;
-
     private final TelemetryManager panelsTelemetry = PanelsTelemetry.INSTANCE.getTelemetry();
 
     @Override
@@ -56,26 +56,27 @@ public class ShooterFFPIDTest extends LinearOpMode {
             hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL);
         }
 
-        DcMotorEx pollen = hardwareMap.get(DcMotorEx.class, "PollenShooter");
-        DcMotorEx nectar = hardwareMap.get(DcMotorEx.class, "NectarShooter");
-        Servo pollenGate = hardwareMap.get(Servo.class, "pollenGate");
-        Servo nectarGate = hardwareMap.get(Servo.class, "nectarGate");
+        DcMotorEx shooterUp = hardwareMap.get(DcMotorEx.class, ShooterSubsystem.SHOOTER_UP_NAME);
+        DcMotorEx shooterDown = hardwareMap.get(DcMotorEx.class, ShooterSubsystem.SHOOTER_DOWN_NAME);
+        Servo gate = hardwareMap.get(Servo.class, GateSubsystem.GATE_NAME);
         DcMotorEx intake = hardwareMap.get(DcMotorEx.class, "intake");
-        DcMotorEx intake1 = hardwareMap.get(DcMotorEx.class, "intake1");
+        DcMotorEx preShooter = hardwareMap.get(DcMotorEx.class, "preShooter");
         VoltageSensor battery = hardwareMap.voltageSensor.iterator().next();
 
-        for (DcMotorEx m : new DcMotorEx[]{pollen, nectar}) {
-            m.setDirection(DcMotorSimple.Direction.REVERSE);
+        // 两个电机同时用、方向相反
+        shooterUp.setDirection(DcMotorSimple.Direction.REVERSE);
+        shooterDown.setDirection(DcMotorSimple.Direction.FORWARD);
+        for (DcMotorEx m : new DcMotorEx[]{shooterUp, shooterDown}) {
             m.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
             m.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
             // 编码器照样能读速度，但功率由我们自己算
             m.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         }
         intake.setDirection(DcMotorSimple.Direction.FORWARD);
-        intake1.setDirection(DcMotorSimple.Direction.REVERSE);
+        preShooter.setDirection(DcMotorSimple.Direction.REVERSE);
 
-        FlywheelController pollenCtrl = new FlywheelController();
-        FlywheelController nectarCtrl = new FlywheelController();
+        // 一套 PID 参数，一个控制器，同一个功率给两个电机
+        FlywheelController shooterCtrl = new FlywheelController();
 
         telemetry.addLine("FF+PID shooter test ready");
         telemetry.update();
@@ -83,7 +84,6 @@ public class ShooterFFPIDTest extends LinearOpMode {
 
         ElapsedTime loopTimer = new ElapsedTime();
         double filteredVoltage = battery.getVoltage();
-        boolean lastUp = false, lastDown = false;
 
         while (opModeIsActive()) {
             for (LynxModule hub : hubs) hub.clearBulkCache();
@@ -94,46 +94,39 @@ public class ShooterFFPIDTest extends LinearOpMode {
             // 电压读一次很慢且有噪声，做个慢滤波
             filteredVoltage += 0.05 * (battery.getVoltage() - filteredVoltage);
 
-            if (gamepad1.dpad_up && !lastUp) shooterSelect = (shooterSelect + 1) % 3;
-            if (gamepad1.dpad_down && !lastDown) shooterSelect = (shooterSelect + 2) % 3;
-            lastUp = gamepad1.dpad_up;
-            lastDown = gamepad1.dpad_down;
-
             double target = gamepad1.right_trigger > 0.5 ? shootVelocity : idleVelocity;
-            boolean runPollen = shooterSelect != 1;
-            boolean runNectar = shooterSelect != 0;
 
-            double pollenPower = pollenCtrl.update(runPollen ? target : 0, pollen.getVelocity(), filteredVoltage, dt);
-            double nectarPower = nectarCtrl.update(runNectar ? target : 0, nectar.getVelocity(), filteredVoltage, dt);
-            pollen.setPower(pollenPower);
-            nectar.setPower(nectarPower);
+            double upVelocity = shooterUp.getVelocity();
+            double downVelocity = shooterDown.getVelocity();
+            double averageVelocity = (upVelocity + downVelocity) / 2.0;
+            double power = shooterCtrl.update(target, averageVelocity, filteredVoltage, dt);
+            shooterUp.setPower(power);
+            shooterDown.setPower(power);
 
             double intakePower = gamepad1.a ? 1 : 0;
             intake.setPower(intakePower);
-            intake1.setPower(intakePower);
+            preShooter.setPower(intakePower);
 
-            if (gamepad1.right_bumper) {
-                nectarGate.setPosition(0);
-                pollenGate.setPosition(0.5);
-            } else {
-                nectarGate.setPosition(0.33);
-                pollenGate.setPosition(0.8);
-            }
+            gate.setPosition(gamepad1.right_bumper
+                    ? GateSubsystem.SHOOT_POSITION
+                    : GateSubsystem.STOP_POSITION);
 
-            panelsTelemetry.addData("Shooter Select", shooterSelect == 0 ? "pollen" : shooterSelect == 1 ? "nectar" : "both");
             panelsTelemetry.addData("Shooter Target Velocity", target);
-            pollenCtrl.addTelemetry(panelsTelemetry, "Pollen");
-            nectarCtrl.addTelemetry(panelsTelemetry, "Nectar");
+            panelsTelemetry.addData("Up Velocity", upVelocity);
+            panelsTelemetry.addData("Down Velocity", downVelocity);
+            shooterCtrl.addTelemetry(panelsTelemetry, "Shooter");
             panelsTelemetry.addData("Battery Voltage", filteredVoltage);
             panelsTelemetry.addData("Loop ms", dt * 1000);
             panelsTelemetry.update(telemetry);
         }
 
-        pollen.setPower(0);
-        nectar.setPower(0);
+        shooterUp.setPower(0);
+        shooterDown.setPower(0);
+        intake.setPower(0);
+        preShooter.setPower(0);
     }
 
-    /** 单个飞轮的 前馈 + PID 控制器。参数读外层的静态字段，所以 Panels 改了立刻生效。 */
+    /** 飞轮（上下两个电机共用）的 前馈 + PID 控制器。参数读外层的静态字段，所以 Panels 改了立刻生效。 */
     private static class FlywheelController {
         private double filteredVel = 0;
         private double lastFilteredVel = 0;

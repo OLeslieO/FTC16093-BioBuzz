@@ -13,7 +13,7 @@ import java.util.function.DoubleSupplier;
 
 
 @Configurable
-public class PollenShooterSubsystem extends SubsystemBase {
+public class ShooterSubsystem extends SubsystemBase {
 
     public enum State {
         /** 加速。 */
@@ -21,10 +21,13 @@ public class PollenShooterSubsystem extends SubsystemBase {
         /** 空转。 */
         IDLE,
         /** 停止。 */
-        STOP
+        STOP,
+        /** 固定目标速度，用 setVelocity 设置。 */
+        CUSTOM
     }
 
-    public static String POLLEN_SHOOTER_NAME = "PollenShooter";
+    public static String SHOOTER_UP_NAME = "shooterUp";
+    public static String SHOOTER_DOWN_NAME = "shooterDown";
 
     // ---------- 目标（ticks/s） ----------
     public static double ACCELERATE_VEL = 1540;
@@ -60,10 +63,12 @@ public class PollenShooterSubsystem extends SubsystemBase {
     /** 误差在这范围内算"到速"。 */
     public static double READY_TOLERANCE = 60;
 
-    private final DcMotorEx pollenShooter;
+    private final DcMotorEx shooterUp;
+    private final DcMotorEx shooterDown;
     private final ElapsedTime loopTimer = new ElapsedTime();
 
     private State state = State.ACCELERATE;
+    private double customVel = 0.0;
     private DoubleSupplier distanceSupplier = null;
     private double lastDistance = Double.NaN;
 
@@ -79,14 +84,19 @@ public class PollenShooterSubsystem extends SubsystemBase {
     // 仅用于 telemetry
     private double error, feedforward, pTerm, iTerm, dTerm, output;
 
-    public PollenShooterSubsystem(HardwareMap hardwareMap) {
-        pollenShooter = hardwareMap.get(DcMotorEx.class, POLLEN_SHOOTER_NAME);
-        pollenShooter.setDirection(DcMotorSimple.Direction.REVERSE);
-        pollenShooter.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
-        pollenShooter.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+    public ShooterSubsystem(HardwareMap hardwareMap) {
+        shooterUp = hardwareMap.get(DcMotorEx.class, SHOOTER_UP_NAME);
+        shooterUp.setDirection(DcMotorSimple.Direction.FORWARD);
+        shooterUp.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+        shooterUp.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        shooterDown = hardwareMap.get(DcMotorEx.class, SHOOTER_DOWN_NAME);
+        shooterDown.setDirection(DcMotorSimple.Direction.FORWARD);
+        shooterDown.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+        shooterDown.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         usingPid = USE_PID;
         usingF = USE_F;
-        pollenShooter.setMode(runMode());
+        shooterUp.setMode(runMode());
+        shooterDown.setMode(runMode());
         stopMotor();
     }
 
@@ -108,6 +118,12 @@ public class PollenShooterSubsystem extends SubsystemBase {
 
     public void stop() {
         setState(State.STOP);
+    }
+
+    /** 以固定速度（ticks/s）运行，不查距离表。 */
+    public void setVelocity(double velocity) {
+        customVel = velocity;
+        setState(State.CUSTOM);
     }
 
 
@@ -155,6 +171,8 @@ public class PollenShooterSubsystem extends SubsystemBase {
                 return IDLE_VEL;
             case STOP:
                 return STOP_VEL;
+            case CUSTOM:
+                return customVel;
             default:
                 return ACCELERATE_VEL;
         }
@@ -208,7 +226,7 @@ public class PollenShooterSubsystem extends SubsystemBase {
     @Override
     public void periodic() {
         updateControlMode();
-        measuredVel = pollenShooter.getVelocity();
+        measuredVel = shooterUp.getVelocity();
 
         double target = getTargetVelocity();
         if (target <= 0) {
@@ -229,7 +247,7 @@ public class PollenShooterSubsystem extends SubsystemBase {
 
         if (!usingPid) {
             error = commandedVel - measuredVel;
-            pollenShooter.setVelocity(commandedVel);
+            shooterUp.setVelocity(commandedVel);
             return;
         }
         if (usingF != USE_F) {
@@ -263,7 +281,8 @@ public class PollenShooterSubsystem extends SubsystemBase {
         previousError = error;
         hasPreviousError = true;
 
-        pollenShooter.setPower(output);
+        shooterUp.setPower(output);
+        shooterDown.setPower(output);
     }
 
     private DcMotor.RunMode runMode() {
@@ -272,9 +291,11 @@ public class PollenShooterSubsystem extends SubsystemBase {
 
     private void stopMotor() {
         if (usingPid) {
-            pollenShooter.setPower(0.0);
+            shooterUp.setPower(0.0);
+            shooterDown.setPower(0.0);
         } else {
-            pollenShooter.setVelocity(0.0);
+            shooterUp.setVelocity(0.0);
+            shooterDown.setVelocity(0.0);
         }
         commandedVel = 0.0;
         feedforward = pTerm = iTerm = dTerm = output = 0.0;
@@ -288,7 +309,8 @@ public class PollenShooterSubsystem extends SubsystemBase {
         // 先用旧模式停下再切换（包括 Panels 里实时改）
         stopMotor();
         usingPid = USE_PID;
-        pollenShooter.setMode(runMode());
+        shooterUp.setMode(runMode());
+        shooterDown.setMode(runMode());
         resetController();
     }
 

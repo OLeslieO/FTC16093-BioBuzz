@@ -5,6 +5,7 @@ import com.bylazar.telemetry.JoinedTelemetry;
 import com.bylazar.telemetry.PanelsTelemetry;
 import com.pedropathing.follower.Follower;
 import com.pedropathing.math.Pose;
+import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
@@ -31,6 +32,11 @@ public class AutoAimTest extends LinearOpMode {
     public void runOpMode() {
         Telemetry out = new JoinedTelemetry(PanelsTelemetry.INSTANCE.getFtcTelemetry(), telemetry);
 
+        // 和 TurretServoTest 一样开 bulk caching：每圈只读一次 Hub，循环快，调好的增益才能通用
+        for (LynxModule hub : hardwareMap.getAll(LynxModule.class)) {
+            hub.setBulkCachingMode(LynxModule.BulkCachingMode.AUTO);
+        }
+
         Alliance.set(Alliance.RED);
         FieldConstants.AIM_POINT_INDEX = 0; // 默认瞄 (59, 59)
 
@@ -51,7 +57,7 @@ public class AutoAimTest extends LinearOpMode {
             out.addData("Aim Point", "(%.1f, %.1f)",
                     Alliance.get().getAimX(), Alliance.get().getAimY());
             out.addData("Turret Angle", "%.1f°", Math.toDegrees(aim.getTurretAngle()));
-            out.addLine("云台要朝正前方；A 开瞄准，Y 边走边射，X 重置位姿");
+            out.addLine("云台要朝正前方；dpad 上 开瞄准，Y 边走边射，X 重置位姿");
             out.update();
         }
         if (isStopRequested()) {
@@ -65,8 +71,14 @@ public class AutoAimTest extends LinearOpMode {
         boolean lastX = false;
         boolean lastDpadLeft = false;
 
+        double lastTime = getRuntime();
+
         try {
             while (opModeIsActive()) {
+                double now = getRuntime();
+                double loopMs = (now - lastTime) * 1000.0;
+                lastTime = now;
+
                 // ---- 按键（上升沿）----
                 if (gamepad1.dpad_up && !lastA) {
                     if (aim.isEnabled()) {
@@ -106,6 +118,7 @@ public class AutoAimTest extends LinearOpMode {
 
                 out.addData("Aim Point", "#%d (%.1f, %.1f)", FieldConstants.AIM_POINT_INDEX,
                         Alliance.get().getAimX(), Alliance.get().getAimY());
+                out.addData("loop_ms", "%.1f", loopMs);
                 out.addData("Distance To Aim", "%.1f in", Alliance.get().distanceToAim(drive.getPose()));
                 out.update();
             }

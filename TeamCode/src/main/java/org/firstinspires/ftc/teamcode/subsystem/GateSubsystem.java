@@ -8,24 +8,24 @@ import com.seattlesolvers.solverslib.command.SubsystemBase;
 
 
 @Configurable
-public class PollenGateSubsystem extends SubsystemBase {
+public class GateSubsystem extends SubsystemBase {
 
     public enum State {
         SHOOT,
         STOP
     }
 
-    public static String POLLEN_GATE_NAME = "pollenGate";
+    public static String GATE_NAME = "gate";
 
-    public static double POLLEN_SHOOT_POSITION = 0.5;
-    public static double POLLEN_STOP_POSITION = 0.9;
+    public static double SHOOT_POSITION = 0.15;
+    public static double STOP_POSITION = 0;
 
-    private final Servo pollenGate;
+    private final Servo gate;
 
     private State state = State.STOP;
 
-    public PollenGateSubsystem(HardwareMap hardwareMap) {
-        pollenGate = hardwareMap.get(Servo.class, POLLEN_GATE_NAME);
+    public GateSubsystem(HardwareMap hardwareMap) {
+        gate = hardwareMap.get(Servo.class, GATE_NAME);
     }
 
     public void setState(State state) {
@@ -47,15 +47,15 @@ public class PollenGateSubsystem extends SubsystemBase {
     public double getTargetPosition() {
         switch (state) {
             case SHOOT:
-                return POLLEN_SHOOT_POSITION;
+                return SHOOT_POSITION;
             case STOP:
             default:
-                return POLLEN_STOP_POSITION;
+                return STOP_POSITION;
         }
     }
 
     @Override
     public void periodic() {
-        pollenGate.setPosition(Range.clip(getTargetPosition(), 0.0, 1.0));
+        gate.setPosition(Range.clip(getTargetPosition(), 0.0, 1.0));
     }
 }

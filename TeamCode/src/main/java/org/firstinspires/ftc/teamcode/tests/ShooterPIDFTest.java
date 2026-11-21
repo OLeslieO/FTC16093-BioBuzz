@@ -12,6 +12,9 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
+import org.firstinspires.ftc.teamcode.subsystem.GateSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.ShooterSubsystem;
+
 import java.util.List;
 
 @TeleOp(name = "Test Shooter PIDF", group = "test")
@@ -20,7 +23,6 @@ public class ShooterPIDFTest extends LinearOpMode {
     // ticks/s
     public static double SHOOT_VEL = 1840;
     public static double IDLE_VEL = 1000;
-    public static int shooterSelect = 0;
     public static boolean USE_PID = true;
     public static double VELOCITY_P = 0.006;
     public static double VELOCITY_I = 0;
@@ -39,69 +41,53 @@ public class ShooterPIDFTest extends LinearOpMode {
             hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL);
         }
 
-        FlywheelController pollen = new FlywheelController(hardwareMap.get(DcMotorEx.class, "PollenShooter"));
-        FlywheelController nectar = new FlywheelController(hardwareMap.get(DcMotorEx.class, "NectarShooter"));
-        Servo pollenGate = hardwareMap.get(Servo.class, "pollenGate");
-        Servo nectarGate = hardwareMap.get(Servo.class, "nectarGate");
+        // 两个电机同时用、方向相反，一套 PIDF 参数同时作用在两个电机上
+        FlywheelController shooter = new FlywheelController(
+                hardwareMap.get(DcMotorEx.class, ShooterSubsystem.SHOOTER_UP_NAME),
+                hardwareMap.get(DcMotorEx.class, ShooterSubsystem.SHOOTER_DOWN_NAME));
+        Servo gate = hardwareMap.get(Servo.class, GateSubsystem.GATE_NAME);
         DcMotorEx intake = hardwareMap.get(DcMotorEx.class, "intake");
-        DcMotorEx intake1 = hardwareMap.get(DcMotorEx.class, "intake1");
+        DcMotorEx preShooter = hardwareMap.get(DcMotorEx.class, "preShooter");
         intake.setDirection(DcMotorSimple.Direction.FORWARD);
-        intake1.setDirection(DcMotorSimple.Direction.REVERSE);
+        preShooter.setDirection(DcMotorSimple.Direction.FORWARD);
 
         telemetry.addLine("PIDF shooter test ready");
         telemetry.update();
         waitForStart();
-        pollen.resetController();
-        nectar.resetController();
-
-        boolean lastUp = false, lastDown = false;
+        shooter.resetController();
 
         while (opModeIsActive()) {
             for (LynxModule hub : hubs) hub.clearBulkCache();
 
-            if (gamepad1.dpad_up && !lastUp) shooterSelect = (shooterSelect + 1) % 3;
-            if (gamepad1.dpad_down && !lastDown) shooterSelect = (shooterSelect + 2) % 3;
-            lastUp = gamepad1.dpad_up;
-            lastDown = gamepad1.dpad_down;
-            int select = Math.floorMod(shooterSelect, 3);
-
             double target = gamepad1.right_trigger > 0.5 ? SHOOT_VEL : IDLE_VEL;
-            pollen.setVelocity(select != 1 ? target : 0);
-            nectar.setVelocity(select != 0 ? target : 0);
-            pollen.periodic();
-            nectar.periodic();
+            shooter.setVelocity(target);
+            shooter.periodic();
 
             double intakePower = gamepad1.a ? 0.9 : 0;
             intake.setPower(intakePower);
-            intake1.setPower(intakePower);
+            preShooter.setPower(intakePower);
 
-            if (gamepad1.right_bumper) {
-                nectarGate.setPosition(0);
-                pollenGate.setPosition(0.5);
-            } else {
-                nectarGate.setPosition(0.33);
-                pollenGate.setPosition(0.8);
-            }
+            gate.setPosition(gamepad1.right_bumper
+                    ? GateSubsystem.SHOOT_POSITION
+                    : GateSubsystem.STOP_POSITION);
 
-            panelsTelemetry.addData("Shooter Select", select == 0 ? "pollen" : select == 1 ? "nectar" : "both");
             panelsTelemetry.addData("Mode", USE_PID ? (USE_F ? "PID+F" : "PID") : "Hub velocity");
             panelsTelemetry.addData("Target Velocity", target);
-            pollen.addTelemetry(panelsTelemetry, "Pollen");
-            nectar.addTelemetry(panelsTelemetry, "Nectar");
+            shooter.addTelemetry(panelsTelemetry, "Shooter");
             panelsTelemetry.update(telemetry);
         }
 
-        pollen.stop();
-        nectar.stop();
+        shooter.stop();
         intake.setPower(0);
-        intake1.setPower(0);
+        preShooter.setPower(0);
     }
 
     private static class FlywheelController {
-        private final DcMotorEx motor;
+        private final DcMotorEx up;
+        private final DcMotorEx down;
         private final ElapsedTime loopTimer = new ElapsedTime();
         private double commandedVel;
-        private double measuredVel;
+        private double measuredVel, upVel, downVel;
         private double integral;
         private double previousError;
         private boolean hasPreviousError;
@@ -109,15 +95,35 @@ public class ShooterPIDFTest extends LinearOpMode {
         private boolean usingF;
         private double error, feedforward, pTerm, iTerm, dTerm, output;
 
-        FlywheelController(DcMotorEx motor) {
-            this.motor = motor;
+        FlywheelController(DcMotorEx up, DcMotorEx down) {
+            this.up = up;
+            this.down = down;
             usingPid = USE_PID;
             usingF = USE_F;
-            motor.setDirection(DcMotorSimple.Direction.REVERSE);
-            motor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
-            motor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-            motor.setMode(runMode());
+            up.setDirection(DcMotorSimple.Direction.FORWARD);
+            down.setDirection(DcMotorSimple.Direction.FORWARD);
+            for (DcMotorEx m : new DcMotorEx[]{up, down}) {
+                m.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+                m.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+                m.setMode(runMode());
+            }
             stop();
+        }
+
+        private void readVelocity() {
+            upVel = up.getVelocity();
+            downVel = down.getVelocity();
+            measuredVel = (upVel + downVel) / 2.0;
+        }
+
+        private void setPower(double power) {
+            up.setPower(power);
+            down.setPower(power);
+        }
+
+        private void setMotorVelocity(double velocity) {
+            up.setVelocity(velocity);
+            down.setVelocity(velocity);
         }
 
         private DcMotor.RunMode runMode() {
@@ -135,19 +141,18 @@ public class ShooterPIDFTest extends LinearOpMode {
             }
             commandedVel = velocity;
             if (!usingPid) {
-                motor.setVelocity(velocity);
+                setMotorVelocity(velocity);
             }
         }
 
         void periodic() {
             updateControlMode();
+            readVelocity();
             if (commandedVel == 0.0) {
-                measuredVel = motor.getVelocity();
                 return;
             }
-            measuredVel = motor.getVelocity();
             if (!usingPid) {
-                motor.setVelocity(commandedVel);
+                setMotorVelocity(commandedVel);
                 return;
             }
             if (usingF != USE_F) {
@@ -179,14 +184,14 @@ public class ShooterPIDFTest extends LinearOpMode {
             previousError = error;
             hasPreviousError = true;
 
-            motor.setPower(output);
+            setPower(output);
         }
 
         void stop() {
             if (usingPid) {
-                motor.setPower(0.0);
+                setPower(0.0);
             } else {
-                motor.setVelocity(0.0);
+                setMotorVelocity(0.0);
             }
             commandedVel = 0.0;
             error = feedforward = pTerm = iTerm = dTerm = output = 0.0;
@@ -198,12 +203,13 @@ public class ShooterPIDFTest extends LinearOpMode {
                 return;
             }
             if (usingPid) {
-                motor.setPower(0.0);
+                setPower(0.0);
             } else {
-                motor.setVelocity(0.0);
+                setMotorVelocity(0.0);
             }
             usingPid = USE_PID;
-            motor.setMode(runMode());
+            up.setMode(runMode());
+            down.setMode(runMode());
             resetController();
         }
 
@@ -225,13 +231,16 @@ public class ShooterPIDFTest extends LinearOpMode {
         void addTelemetry(TelemetryManager t, String name) {
             t.addData(name + " Commanded", commandedVel);
             t.addData(name + " Velocity", measuredVel);
+            t.addData(name + " Up Velocity", upVel);
+            t.addData(name + " Down Velocity", downVel);
             t.addData(name + " Error", error);
             t.addData(name + " FF", feedforward);
             t.addData(name + " P", pTerm);
             t.addData(name + " I", iTerm);
             t.addData(name + " D", dTerm);
             t.addData(name + " Output", output);
-            t.addData(name + " Power", motor.getPower());
+            t.addData(name + " Up Power", up.getPower());
+            t.addData(name + " Down Power", down.getPower());
             t.addData(name + " At Speed", isAtSpeed());
             t.addData(name + " Ready", isReadyToShoot());
         }

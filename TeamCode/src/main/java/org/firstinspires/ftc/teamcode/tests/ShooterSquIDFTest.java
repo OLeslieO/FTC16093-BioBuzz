@@ -13,6 +13,9 @@ import com.qualcomm.robotcore.hardware.Servo;
 import com.seattlesolvers.solverslib.controller.PIDFController;
 import com.seattlesolvers.solverslib.controller.SquIDFController;
 
+import org.firstinspires.ftc.teamcode.subsystem.GateSubsystem;
+import org.firstinspires.ftc.teamcode.subsystem.ShooterSubsystem;
+
 import java.util.List;
 
 /**
@@ -22,10 +25,12 @@ import java.util.List;
  * Because the P term uses sqrt(error) (ticks/s), kP needs to be much larger than in the
  * linear PIDF test: e.g. 200 ticks/s error -> sqrt = ~14.
  *
+ * Both shooter motors (shooterUp / shooterDown) run together in opposite directions,
+ * driven by one controller on their average velocity with the same power.
+ *
  * Controls (gamepad1):
  *   right trigger  - SHOOT_VEL (otherwise IDLE_VEL)
  *   left bumper    - toggle flywheels off/on
- *   dpad up/down   - cycle shooter select (pollen / nectar / both)
  *   a              - run intake
  *   right bumper   - open gates
  */
@@ -35,7 +40,6 @@ public class ShooterSquIDFTest extends LinearOpMode {
     // ticks/s
     public static double SHOOT_VEL = 1840;
     public static double IDLE_VEL = 1000;
-    public static int shooterSelect = 0;
 
     public static double kP = 0.03;
     public static double kI = 0;
@@ -64,10 +68,10 @@ public class ShooterSquIDFTest extends LinearOpMode {
             hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL);
         }
 
-        Flywheel pollen = new Flywheel(hardwareMap.get(DcMotorEx.class, "PollenShooter"));
-        Flywheel nectar = new Flywheel(hardwareMap.get(DcMotorEx.class, "NectarShooter"));
-        Servo pollenGate = hardwareMap.get(Servo.class, "pollenGate");
-        Servo nectarGate = hardwareMap.get(Servo.class, "nectarGate");
+        Flywheel shooter = new Flywheel(
+                hardwareMap.get(DcMotorEx.class, ShooterSubsystem.SHOOTER_UP_NAME),
+                hardwareMap.get(DcMotorEx.class, ShooterSubsystem.SHOOTER_DOWN_NAME));
+        Servo gate = hardwareMap.get(Servo.class, GateSubsystem.GATE_NAME);
         DcMotorEx intake = hardwareMap.get(DcMotorEx.class, "intake");
         DcMotorEx intake1 = hardwareMap.get(DcMotorEx.class, "intake1");
         intake.setDirection(DcMotorSimple.Direction.FORWARD);
@@ -77,69 +81,66 @@ public class ShooterSquIDFTest extends LinearOpMode {
         telemetry.update();
         waitForStart();
 
-        boolean lastUp = false, lastDown = false, lastLB = false;
+        boolean lastLB = false;
         boolean enabled = true;
 
         while (opModeIsActive()) {
             for (LynxModule hub : hubs) hub.clearBulkCache();
 
-            if (gamepad1.dpad_up && !lastUp) shooterSelect = (shooterSelect + 1) % 3;
-            if (gamepad1.dpad_down && !lastDown) shooterSelect = (shooterSelect + 2) % 3;
             if (gamepad1.left_bumper && !lastLB) enabled = !enabled;
-            lastUp = gamepad1.dpad_up;
-            lastDown = gamepad1.dpad_down;
             lastLB = gamepad1.left_bumper;
-            int select = Math.floorMod(shooterSelect, 3);
 
             double target = !enabled ? 0 : gamepad1.right_trigger > 0.5 ? SHOOT_VEL : IDLE_VEL;
-            pollen.setTarget(select != 1 ? target : 0);
-            nectar.setTarget(select != 0 ? target : 0);
-            pollen.update();
-            nectar.update();
+            shooter.setTarget(target);
+            shooter.update();
 
             double intakePower = gamepad1.a ? 0.9 : 0;
             intake.setPower(intakePower);
             intake1.setPower(intakePower);
 
-            if (gamepad1.right_bumper) {
-                nectarGate.setPosition(0);
-                pollenGate.setPosition(0.5);
-            } else {
-                nectarGate.setPosition(0.33);
-                pollenGate.setPosition(0.8);
-            }
+            gate.setPosition(gamepad1.right_bumper
+                    ? GateSubsystem.SHOOT_POSITION
+                    : GateSubsystem.STOP_POSITION);
 
             panelsTelemetry.addData("Enabled", enabled);
-            panelsTelemetry.addData("Shooter Select", select == 0 ? "pollen" : select == 1 ? "nectar" : "both");
             panelsTelemetry.addData("Target Velocity", target);
-            pollen.addTelemetry(panelsTelemetry, "Pollen");
-            nectar.addTelemetry(panelsTelemetry, "Nectar");
+            shooter.addTelemetry(panelsTelemetry, "Shooter");
             panelsTelemetry.update(telemetry);
         }
 
-        pollen.stop();
-        nectar.stop();
+        shooter.stop();
         intake.setPower(0);
         intake1.setPower(0);
     }
 
     private static class Flywheel {
-        private final DcMotorEx motor;
+        private final DcMotorEx up;
+        private final DcMotorEx down;
         private final SquIDFController controller = new SquIDFController(kP, kI, kD, kF);
         private final PIDFController.IntegrationControl integration =
                 new PIDFController.IntegrationControl(PIDFController.IntegrationBehavior.NONE, 1, -1, 1);
         private double target;
-        private double measured;
+        private double measured, upVel, downVel;
         private double output;
 
-        Flywheel(DcMotorEx motor) {
-            this.motor = motor;
-            motor.setDirection(DcMotorSimple.Direction.REVERSE);
-            motor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
-            motor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-            motor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        Flywheel(DcMotorEx up, DcMotorEx down) {
+            this.up = up;
+            this.down = down;
+            // Opposite directions so both wheels spin the right way with the same power.
+            up.setDirection(DcMotorSimple.Direction.REVERSE);
+            down.setDirection(DcMotorSimple.Direction.FORWARD);
+            for (DcMotorEx m : new DcMotorEx[]{up, down}) {
+                m.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+                m.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+                m.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+            }
             controller.setIntegrationControl(integration);
-            motor.setPower(0);
+            setPower(0);
+        }
+
+        private void setPower(double power) {
+            up.setPower(power);
+            down.setPower(power);
         }
 
         void setTarget(double velocity) {
@@ -151,11 +152,13 @@ public class ShooterSquIDFTest extends LinearOpMode {
         }
 
         void update() {
-            measured = motor.getVelocity();
+            upVel = up.getVelocity();
+            downVel = down.getVelocity();
+            measured = (upVel + downVel) / 2.0;
 
             if (target == 0) {
                 output = 0;
-                motor.setPower(0);
+                setPower(0);
                 return;
             }
 
@@ -171,13 +174,13 @@ public class ShooterSquIDFTest extends LinearOpMode {
             controller.setSetPoint(target);
             double raw = controller.calculate(measured);
             output = Math.max(ALLOW_REVERSE ? -1.0 : 0.0, Math.min(1.0, raw));
-            motor.setPower(output);
+            setPower(output);
         }
 
         void stop() {
             target = 0;
             output = 0;
-            motor.setPower(0);
+            setPower(0);
             controller.reset();
         }
 
@@ -185,6 +188,8 @@ public class ShooterSquIDFTest extends LinearOpMode {
             double error = target - measured;
             t.addData(name + " Target", target);
             t.addData(name + " Velocity", measured);
+            t.addData(name + " Up Velocity", upVel);
+            t.addData(name + " Down Velocity", downVel);
             t.addData(name + " Error", error);
             t.addData(name + " P (sqrt)", kP * Math.sqrt(Math.abs(error)) * Math.signum(error));
             t.addData(name + " FF", kF * target);

@@ -288,9 +288,9 @@ public class AutoAimSubsystem {
         lastVelocityCommand = velocityCommand;
         hasHistory = true;
 
-        // kS 随速度指令线性长出来（到 KS_RAMP_VEL 时满额），指令在 0 附近抖动时不会让功率来回跳 ±kS
-        double staticFriction = AutoAimConfig.kS
-                * clip(velocityCommand / AutoAimConfig.KS_RAMP_VEL, -1.0, 1.0);
+        // 和 TurretServoTest 一样：速度指令超过 KS_MIN_VEL 才加满额 kS，否则不加
+        double staticFriction = Math.abs(velocityCommand) > AutoAimConfig.KS_MIN_VEL
+                ? Math.copySign(AutoAimConfig.kS, velocityCommand) : 0.0;
         double rawPower = staticFriction
                 + AutoAimConfig.kV * velocityCommand
                 + AutoAimConfig.kA * filteredAccelCommand
@@ -315,8 +315,8 @@ public class AutoAimSubsystem {
     private static Pose pivotOf(ChassisMotionPredictor.Prediction state) {
         return TurretAimCalculator.pivotPose(
                 new Pose(state.x, state.y, state.heading),
-                AutoAimConfig.pivotOffsetForwardIn(),
-                AutoAimConfig.pivotOffsetLeftIn());
+                AutoAimConfig.PIVOT_OFFSET_FORWARD_IN,
+                AutoAimConfig.PIVOT_OFFSET_LEFT_IN);
     }
 
     /** 旋转轴的场地速度 = 底盘速度 + ω × 偏移（偏移不在中心时，原地转也会让旋转轴移动）。 */
