@@ -1,0 +1,706 @@
+package org.firstinspires.ftc.teamcode.tests;
+
+import com.bylazar.configurables.annotations.Configurable;
+import com.bylazar.telemetry.PanelsTelemetry;
+import com.bylazar.telemetry.TelemetryManager;
+import com.pedropathing.math.Pose;
+import com.pedropathing.math.Velocity;
+import com.qualcomm.hardware.lynx.LynxModule;
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+
+import org.firstinspires.ftc.teamcode.subsystem.autoaim.AutoAimConfig;
+import org.firstinspires.ftc.teamcode.subsystem.autoaim.AutoAimSubsystem;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 云台调参。
+ *
+ * <p>底盘不用动，云台摆正前方后 INIT。
+ *
+ * <ul>
+ *   <li>MODE 1 自动扫描：开环测 kS、kV、最高速度、减速度，给出推荐值。按 X 写入 AutoAimConfig。</li>
+ *   <li>MODE 2 阶跃测试：云台在 STEP_A / STEP_B 之间来回跳，统计过冲、摆动次数、稳定时间，
+ *       用来调 KP_VEL、KP_POS、MAX_TURRET_DECEL。</li>
+ *   <li>MODE 3 保持角度：停在 HOLD_DEG，用手拨云台看它怎么回位。</li>
+ * </ul>
+ *
+ * <p>手柄：A 开始/重新开始，B 停止，X 把扫描结果写入 AutoAimConfig，dpad 左/右 切换模式。
+ * 写入只在本次运行有效，满意后要手动抄回 AutoAimConfig.java。
+ */
+@TeleOp(name = "Turret Tuner", group = "test")
+@Configurable
+public class TurretTuner extends LinearOpMode {
+
+    public static int MODE = 1;
+
+    // ---- MODE 1 自动扫描 ----
+    /** 每个功率各正反跑一趟。功率必须比 kS 大，否则转不动。 */
+    public static double[] SWEEP_POWERS = {0.25, 0.4, 0.55, 0.7, 0.85};
+    /** 每趟从 -END 跑到 +END（或反过来）。留够刹车余量，别贴着机械限位。 */
+    public static double SWEEP_END_DEG = 130.0;
+    /** 只在 |角度| ≤ 这个值时采样速度，前面一段留给加速。 */
+    public static double SAMPLE_WINDOW_DEG = 70.0;
+    public static double PASS_TIMEOUT = 4.0;
+    /** 测起转功率时，功率每秒增加多少。 */
+    public static double BREAKAWAY_RAMP = 0.05;
+    /** 实测速度超过这个值（°/s）就算开始转了。 */
+    public static double BREAKAWAY_VEL_DPS = 8.0;
+    /** 推荐 MAX_TURRET_VEL = 这个系数 × 满功率能达到的速度（留余量给速度环修正）。 */
+    public static double MAX_VEL_MARGIN = 0.85;
+    /** 推荐 MAX_TURRET_DECEL = 这个系数 × 实测减速度。 */
+    public static double DECEL_MARGIN = 0.6;
+
+    // ---- MODE 2 阶跃测试 ----
+    public static double STEP_A_DEG = -60.0;
+    public static double STEP_B_DEG = 60.0;
+    public static double STEP_PERIOD = 2.5;
+    /** 误差在这个范围内算到位。 */
+    public static double SETTLE_TOL_DEG = 1.5;
+
+    // ---- MODE 3 保持角度 ----
+    public static double HOLD_DEG = 0.0;
+
+    private final TelemetryManager panels = PanelsTelemetry.INSTANCE.getTelemetry();
+    private AutoAimSubsystem aim;
+    private List<LynxModule> hubs;
+
+    private double angle;    // rad
+    private double velocity; // rad/s，原始值
+    private double velFilt;  // rad/s，简单低通，只给扫描用
+
+    private final SweepTest sweep = new SweepTest();
+    private final StepTest step = new StepTest();
+    private boolean running = false;
+    private int runningMode = 0;
+
+    @Override
+    public void runOpMode() {
+        // MANUAL：每圈只读一次 Hub，子系统里多次读编码器也不会多花时间
+        hubs = hardwareMap.getAll(LynxModule.class);
+        for (LynxModule hub : hubs) {
+            hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL);
+        }
+
+        aim = new AutoAimSubsystem(hardwareMap, telemetry,
+                () -> new Pose(0, 0, 0), () -> new Velocity(0, 0, 0), true);
+
+        while (opModeInInit()) {
+            readSensors();
+            panels.addLine("Turret Tuner — 云台摆正前方后再 INIT，底盘不用动");
+            panels.addLine("用手向左（逆时针）转云台，angle_deg 应该变大");
+            panels.addData("angle_deg", Math.toDegrees(angle));
+            panels.addLine("A 开始  B 停止  X 写入扫描结果  dpad 左/右 换模式");
+            panels.addLine("MODE 1 自动扫描 kS/kV/速度/减速度");
+            panels.addLine("MODE 2 阶跃测试（调 KP_VEL / KP_POS / MAX_TURRET_DECEL）");
+            panels.addLine("MODE 3 保持角度（手拨看回位）");
+            panels.update(telemetry);
+        }
+        if (isStopRequested()) {
+            return;
+        }
+
+        boolean lastA = false, lastB = false, lastX = false, lastL = false, lastR = false;
+        double lastTime = getRuntime();
+
+        try {
+            while (opModeIsActive()) {
+                double now = getRuntime();
+                double loopMs = (now - lastTime) * 1000.0;
+                lastTime = now;
+                readSensors();
+
+                if (gamepad1.dpad_right && !lastR) {
+                    MODE = MODE % 3 + 1;
+                }
+                if (gamepad1.dpad_left && !lastL) {
+                    MODE = (MODE + 1) % 3 + 1;
+                }
+                if (gamepad1.a && !lastA) {
+                    start(now);
+                }
+                if (gamepad1.b && !lastB) {
+                    stopTest();
+                }
+                if (gamepad1.x && !lastX) {
+                    sweep.apply();
+                }
+                lastA = gamepad1.a;
+                lastB = gamepad1.b;
+                lastX = gamepad1.x;
+                lastL = gamepad1.dpad_left;
+                lastR = gamepad1.dpad_right;
+
+                panels.addLine(String.format("MODE %d %s  [%s]", MODE, modeName(MODE),
+                        running ? "运行中: " + modeName(runningMode) : "停止，按 A 开始"));
+
+                if (running) {
+                    switch (runningMode) {
+                        case 1:
+                            sweep.update(now);
+                            if (sweep.finished()) {
+                                running = false;
+                            }
+                            break;
+                        case 2:
+                            step.update(now);
+                            break;
+                        case 3:
+                            aim.holdAngle(Math.toRadians(HOLD_DEG));
+                            aim.update();
+                            break;
+                        default:
+                            break;
+                    }
+                }
+
+                // ---- 曲线（纯数字，Panels 里能画图）----
+                panels.addData("angle_deg", Math.toDegrees(angle));
+                panels.addData("target_deg", Math.toDegrees(aim.getTargetAngle()));
+                panels.addData("error_deg", Math.toDegrees(aim.getError()));
+                panels.addData("vel_dps", Math.toDegrees(velocity));
+                panels.addData("vel_cmd_dps", Math.toDegrees(aim.getVelocityCommand()));
+                panels.addData("power", aim.getPower());
+                panels.addData("loop_ms", loopMs);
+
+                // ---- 结果 ----
+                if (MODE == 1 || runningMode == 1) {
+                    sweep.report();
+                }
+                if (MODE == 2 || runningMode == 2) {
+                    step.report();
+                }
+                panels.addLine(String.format(
+                        "当前参数 kS %.3f  kV %.3f  KP_POS %.2f  KP_VEL %.3f  MAX_VEL %.2f  DECEL %.1f",
+                        AutoAimConfig.kS, AutoAimConfig.kV, AutoAimConfig.KP_POS, AutoAimConfig.KP_VEL,
+                        AutoAimConfig.MAX_TURRET_VEL, AutoAimConfig.MAX_TURRET_DECEL));
+                panels.update(telemetry);
+            }
+        } finally {
+            aim.disable();
+        }
+    }
+
+    private void readSensors() {
+        for (LynxModule hub : hubs) {
+            hub.clearBulkCache();
+        }
+        angle = aim.getTurretAngle();
+        velocity = aim.getTurretVelocity();
+        velFilt += 0.5 * (velocity - velFilt);
+    }
+
+    private void start(double now) {
+        aim.disable();
+        runningMode = MODE;
+        running = true;
+        if (runningMode == 1) {
+            sweep.start(now);
+        } else if (runningMode == 2) {
+            step.start(now);
+        }
+    }
+
+    private void stopTest() {
+        running = false;
+        aim.disable();
+    }
+
+    private static String modeName(int mode) {
+        switch (mode) {
+            case 1: return "自动扫描";
+            case 2: return "阶跃测试";
+            case 3: return "保持角度";
+            default: return "?";
+        }
+    }
+
+    // =================================================================
+    // MODE 1：开环扫描
+    // =================================================================
+
+    private final class SweepTest {
+        private static final int GO_START = 0, BREAK_POS = 1, PASSES = 2, RECOVER = 3,
+                GO_END = 4, BREAK_NEG = 5, DONE = 6, FAILED = 7;
+
+        private int phase = DONE;
+        private String failReason = "";
+        private double phaseStart;
+        private double settledSince;
+        private double movingSince;
+        /** 起转测试：云台停稳后才开始加功率，记下这时的角度和时间。 */
+        private double breakStartAngle;
+        private double breakStartTime;
+        private boolean breakQuiet;
+
+        private int pass;           // 0..2N-1：偶数正向，奇数反向
+        private double passStart;
+        private double velSum;
+        private int velCount;
+        private double[] passVel;   // rad/s，NaN = 无效
+        private double[] passDecel; // rad/s²，NaN = 没测到
+
+        private boolean decelPending;
+        private double decelV0, decelT0;
+
+        private double ksBreakPos = Double.NaN, ksBreakNeg = Double.NaN;
+        // 结果
+        private boolean hasResult = false;
+        private double ksPos, kvPos, ksNeg, kvNeg, ks, kv, maxVel, decel;
+
+        void start(double now) {
+            int n = SWEEP_POWERS.length * 2;
+            passVel = new double[n];
+            passDecel = new double[n];
+            for (int i = 0; i < n; i++) {
+                passVel[i] = Double.NaN;
+                passDecel[i] = Double.NaN;
+            }
+            ksBreakPos = Double.NaN;
+            ksBreakNeg = Double.NaN;
+            hasResult = false;
+            failReason = "";
+            enter(GO_START, now);
+        }
+
+        boolean finished() {
+            return phase == DONE || phase == FAILED;
+        }
+
+        private void enter(int next, double now) {
+            phase = next;
+            phaseStart = now;
+            settledSince = Double.NaN;
+            movingSince = Double.NaN;
+            breakQuiet = false;
+        }
+
+        private double endRad() {
+            return Math.toRadians(SWEEP_END_DEG);
+        }
+
+        void update(double now) {
+            switch (phase) {
+                case GO_START:
+                    if (holdUntilSettled(-endRad(), now)) {
+                        enter(BREAK_POS, now);
+                    }
+                    break;
+                case BREAK_POS:
+                    breakaway(+1, now);
+                    break;
+                case PASSES:
+                    runPass(now);
+                    break;
+                case RECOVER:
+                    // 上一趟转不动卡在半路：先回到这一趟该在的起点
+                    if (holdUntilSettled(passSign(pass) * -endRad(), now)) {
+                        startPass(now, false);
+                    }
+                    break;
+                case GO_END:
+                    if (holdUntilSettled(endRad(), now)) {
+                        enter(BREAK_NEG, now);
+                    }
+                    break;
+                case BREAK_NEG:
+                    breakaway(-1, now);
+                    break;
+                default:
+                    aim.disable();
+                    break;
+            }
+        }
+
+        /** 用真实控制器转到某个角度，稳住 0.3 s（或超时 4 s）后返回 true。 */
+        private boolean holdUntilSettled(double target, double now) {
+            aim.holdAngle(target);
+            aim.update();
+            boolean settled = Math.abs(target - angle) < Math.toRadians(3.0)
+                    && Math.abs(velocity) < Math.toRadians(15.0);
+            if (!settled) {
+                settledSince = Double.NaN;
+            } else if (Double.isNaN(settledSince)) {
+                settledSince = now;
+            }
+            return (settled && now - settledSince > 0.3) || now - phaseStart > 4.0;
+        }
+
+        /** 功率从 0 慢慢加，记下刚开始转动时的功率（起转功率，比 kS 略大）。 */
+        private void breakaway(int sign, double now) {
+            // 先断电等云台停稳（上一步闭环可能还在晃），再开始加功率
+            if (!breakQuiet) {
+                aim.runOpenLoop(0.0);
+                if (Math.abs(Math.toDegrees(velocity)) < 3.0 || now - phaseStart > 2.0) {
+                    breakQuiet = true;
+                    breakStartAngle = angle;
+                    breakStartTime = now;
+                }
+                return;
+            }
+            double p = BREAKAWAY_RAMP * (now - breakStartTime);
+            aim.runOpenLoop(sign * p);
+            double v = Math.toDegrees(velocity) * sign;
+            // 方向用累计位移判断，不看瞬时速度：功率已经够大、而且朝反方向走了 10° 以上才算接反
+            double moved = Math.toDegrees(angle - breakStartAngle) * sign;
+            if (moved < -10.0 && p > 0.05) {
+                fail(sign > 0
+                        ? "正功率时云台角度在变小：改 SERVO_REVERSED 或 ENCODER_REVERSED"
+                        : "负功率时云台角度在变大：改 SERVO_REVERSED 或 ENCODER_REVERSED");
+                return;
+            }
+            if (v > BREAKAWAY_VEL_DPS && moved > 0.0) {
+                if (Double.isNaN(movingSince)) {
+                    movingSince = now;
+                    if (sign > 0) ksBreakPos = p; else ksBreakNeg = p;
+                }
+                if (now - movingSince > 0.15) {
+                    if (sign > 0) {
+                        pass = 0;
+                        startPass(now, false);
+                    } else {
+                        finish();
+                    }
+                }
+            } else {
+                movingSince = Double.NaN;
+            }
+            if (p > 0.6) {
+                fail("功率加到 0.6 还转不动：检查舵机接线、方向，或机械卡住");
+            }
+        }
+
+        private int passSign(int k) {
+            return k % 2 == 0 ? +1 : -1;
+        }
+
+        private double passPower(int k) {
+            return passSign(k) * SWEEP_POWERS[k / 2];
+        }
+
+        private void startPass(double now, boolean measureDecel) {
+            phase = PASSES;
+            passStart = now;
+            velSum = 0.0;
+            velCount = 0;
+            decelPending = measureDecel && Math.abs(velFilt) > Math.toRadians(20.0);
+            decelV0 = velFilt;
+            decelT0 = now;
+        }
+
+        private void runPass(double now) {
+            int sign = passSign(pass);
+            aim.runOpenLoop(passPower(pass));
+
+            // 上一趟还在往反方向冲：从换向到速度过零的时间 → 减速度
+            if (decelPending) {
+                if (Math.signum(velocity) != Math.signum(decelV0)) {
+                    passDecel[pass] = Math.abs(decelV0) / Math.max(now - decelT0, 1e-3);
+                    decelPending = false;
+                } else if (now - decelT0 > 1.0) {
+                    decelPending = false;
+                }
+            }
+
+            if (Math.abs(angle) <= Math.toRadians(SAMPLE_WINDOW_DEG) && !decelPending) {
+                velSum += velocity;
+                velCount++;
+            }
+
+            if (sign * angle >= endRad()) {
+                if (velCount >= 3) {
+                    passVel[pass] = velSum / velCount;
+                }
+                nextPass(now, true);
+            } else if (now - passStart > PASS_TIMEOUT) {
+                // 这个功率转不过去（比 kS 还小），这一趟作废
+                nextPass(now, false);
+                if (phase == PASSES) {
+                    enter(RECOVER, now);
+                }
+            }
+        }
+
+        private void nextPass(double now, boolean reachedEnd) {
+            pass++;
+            if (pass >= SWEEP_POWERS.length * 2) {
+                enter(GO_END, now);
+            } else if (reachedEnd) {
+                startPass(now, true);
+            }
+        }
+
+        private void fail(String reason) {
+            failReason = reason;
+            aim.disable();
+            phase = FAILED;
+        }
+
+        private void finish() {
+            aim.disable();
+            phase = DONE;
+
+            List<double[]> pos = new ArrayList<>();
+            List<double[]> neg = new ArrayList<>();
+            for (int k = 0; k < passVel.length; k++) {
+                double v = passVel[k];
+                if (Double.isNaN(v)) continue;
+                double p = SWEEP_POWERS[k / 2];
+                if (passSign(k) > 0 && v > 0) pos.add(new double[]{v, p});
+                if (passSign(k) < 0 && v < 0) neg.add(new double[]{-v, p});
+            }
+            double[] fp = fitLine(pos);
+            double[] fn = fitLine(neg);
+            if (fp == null || fn == null) {
+                fail("有效数据不够（每个方向至少要 2 个功率转得过去）：把 SWEEP_POWERS 调大");
+                return;
+            }
+            ksPos = fp[0]; kvPos = fp[1];
+            ksNeg = fn[0]; kvNeg = fn[1];
+            ks = Math.max(0.0, 0.5 * (ksPos + ksNeg));
+            kv = 0.5 * (kvPos + kvNeg);
+            double vmaxPos = (AutoAimConfig.MAX_POWER - ksPos) / kvPos;
+            double vmaxNeg = (AutoAimConfig.MAX_POWER - ksNeg) / kvNeg;
+            maxVel = MAX_VEL_MARGIN * Math.min(vmaxPos, vmaxNeg);
+
+            // 减速度：取最高两档功率换向时测到的平均值
+            double sum = 0.0;
+            int cnt = 0;
+            for (int k = passDecel.length - 1; k >= passDecel.length - 2 && k >= 0; k--) {
+                if (!Double.isNaN(passDecel[k])) {
+                    sum += passDecel[k];
+                    cnt++;
+                }
+            }
+            decel = cnt > 0 ? DECEL_MARGIN * sum / cnt : Double.NaN;
+            hasResult = true;
+        }
+
+        /** 把推荐值写进 AutoAimConfig（只在本次运行有效）。 */
+        void apply() {
+            if (!hasResult) {
+                return;
+            }
+            AutoAimConfig.kS = round(ks, 3);
+            AutoAimConfig.kV = round(kv, 3);
+            AutoAimConfig.MAX_TURRET_VEL = round(maxVel, 2);
+            if (!Double.isNaN(decel)) {
+                AutoAimConfig.MAX_TURRET_DECEL = round(decel, 1);
+            }
+        }
+
+        void report() {
+            if (phase == FAILED) {
+                panels.addLine("扫描失败：" + failReason);
+                return;
+            }
+            if (!finished()) {
+                String[] names = {"回到起点", "测正向起转功率", "扫描", "回到起点", "回到终点", "测反向起转功率"};
+                String extra = phase == PASSES
+                        ? String.format("  第 %d/%d 趟 功率 %.2f", pass + 1, SWEEP_POWERS.length * 2, passPower(pass))
+                        : "";
+                panels.addLine("扫描中：" + names[phase] + extra);
+            }
+            for (int k = 0; passVel != null && k < passVel.length; k++) {
+                if (!Double.isNaN(passVel[k]) || !Double.isNaN(passDecel[k])) {
+                    panels.addLine(String.format("  功率 %+.2f → %6.1f °/s   换向减速 %s",
+                            passPower(k),
+                            Double.isNaN(passVel[k]) ? Double.NaN : Math.toDegrees(passVel[k]),
+                            Double.isNaN(passDecel[k]) ? "-"
+                                    : String.format("%.1f rad/s²", passDecel[k])));
+                }
+            }
+            if (!Double.isNaN(ksBreakPos) || !Double.isNaN(ksBreakNeg)) {
+                panels.addLine(String.format("起转功率 正 %.3f / 反 %.3f（比 kS 略大是正常的）",
+                        ksBreakPos, ksBreakNeg));
+            }
+            if (hasResult) {
+                panels.addLine(String.format("拟合 正向 kS %.3f kV %.3f | 反向 kS %.3f kV %.3f",
+                        ksPos, kvPos, ksNeg, kvNeg));
+                panels.addLine(String.format(
+                        "推荐 kS %.3f  kV %.3f  MAX_TURRET_VEL %.2f (%.0f°/s)  MAX_TURRET_DECEL %s",
+                        ks, kv, maxVel, Math.toDegrees(maxVel),
+                        Double.isNaN(decel) ? "没测到" : String.format("%.1f", decel)));
+                if (Math.abs(ksPos - ksNeg) > 0.3 * Math.max(Math.abs(ks), 0.02)
+                        || Math.abs(kvPos - kvNeg) > 0.2 * kv) {
+                    panels.addLine("注意：正反方向差别大，检查两个舵机是否在互相拉扯或机械阻力不均");
+                }
+                panels.addLine("按 X 写入，然后切 MODE 2 做阶跃测试");
+            }
+        }
+    }
+
+    // =================================================================
+    // MODE 2：阶跃测试
+    // =================================================================
+
+    private final class StepTest {
+        private boolean atB;
+        private double stepStart;
+        private double target;
+        private int dir;
+
+        private double overshoot;   // rad，越过目标的最大值
+        private double riseTime;    // s，第一次进入误差带
+        private double lastOutside; // s，最后一次在误差带外
+        private int crossings;
+        private int lastSign;
+        private double peakVel;
+
+        // 最近一步
+        private int steps;
+        private double lastOvershoot, lastRise, lastSettle, lastFinalErr, lastPeakVel;
+        private int lastCrossings;
+        // 平均
+        private double sumOvershoot, sumRise, sumSettle;
+        private int sumCrossings;
+
+        void start(double now) {
+            steps = 0;
+            sumOvershoot = sumRise = sumSettle = 0.0;
+            sumCrossings = 0;
+            atB = false;
+            beginStep(now);
+        }
+
+        private void beginStep(double now) {
+            stepStart = now;
+            target = Math.toRadians(atB ? STEP_B_DEG : STEP_A_DEG);
+            dir = target >= angle ? 1 : -1;
+            overshoot = 0.0;
+            riseTime = Double.NaN;
+            lastOutside = 0.0;
+            crossings = 0;
+            lastSign = 0;
+            peakVel = 0.0;
+        }
+
+        void update(double now) {
+            if (now - stepStart >= STEP_PERIOD) {
+                endStep(now);
+                atB = !atB;
+                beginStep(now);
+            }
+            aim.holdAngle(target);
+            aim.update();
+
+            double t = now - stepStart;
+            double err = angle - target; // 正 = 越过了目标（按 dir 方向）
+            double tol = Math.toRadians(SETTLE_TOL_DEG);
+            overshoot = Math.max(overshoot, dir * err);
+            peakVel = Math.max(peakVel, Math.abs(velocity));
+            if (Math.abs(err) <= tol) {
+                if (Double.isNaN(riseTime)) riseTime = t;
+            } else {
+                lastOutside = t;
+            }
+            // 到位后误差来回变号的次数 = 摆动次数（小于 0.5° 的不算）
+            if (!Double.isNaN(riseTime) && Math.abs(err) > Math.toRadians(0.5)) {
+                int s = err > 0 ? 1 : -1;
+                if (lastSign != 0 && s != lastSign) crossings++;
+                lastSign = s;
+            }
+        }
+
+        private void endStep(double now) {
+            if (steps == 0 && stepStart == 0.0) {
+                return;
+            }
+            lastOvershoot = overshoot;
+            lastRise = riseTime;
+            lastSettle = Double.isNaN(riseTime) ? Double.NaN : lastOutside;
+            lastFinalErr = angle - target;
+            lastCrossings = crossings;
+            lastPeakVel = peakVel;
+            // 第一步从任意位置出发，不计入平均
+            if (steps > 0 && !Double.isNaN(riseTime)) {
+                sumOvershoot += overshoot;
+                sumRise += riseTime;
+                sumSettle += lastOutside;
+                sumCrossings += crossings;
+            }
+            steps++;
+        }
+
+        void report() {
+            int n = Math.max(steps - 1, 0);
+            if (steps == 0) {
+                panels.addLine("阶跃测试：按 A 开始，第一步之后出结果");
+                return;
+            }
+            panels.addLine(String.format(
+                    "上一步  过冲 %.1f°  到位 %s  稳定 %s  摆动 %d 次  最终误差 %.2f°  峰速 %.0f°/s",
+                    Math.toDegrees(lastOvershoot), fmtTime(lastRise), fmtTime(lastSettle),
+                    lastCrossings, Math.toDegrees(lastFinalErr), Math.toDegrees(lastPeakVel)));
+            if (n > 0) {
+                double ov = Math.toDegrees(sumOvershoot / n);
+                double cr = (double) sumCrossings / n;
+                double rise = sumRise / n;
+                double settle = sumSettle / n;
+                panels.addLine(String.format("平均(%d 步)  过冲 %.1f°  到位 %.2fs  稳定 %.2fs  摆动 %.1f 次",
+                        n, ov, rise, settle, cr));
+                panels.addLine("建议：" + advice(ov, cr, rise, settle, Math.toDegrees(lastFinalErr)));
+            }
+        }
+
+        private String advice(double ovDeg, double crossings, double rise, double settle, double finalErrDeg) {
+            if (Math.abs(finalErrDeg) > SETTLE_TOL_DEG && crossings < 1) {
+                return "停在差一点的地方推不动：kS 偏小，或 DEADBAND_DEG 偏大";
+            }
+            if (crossings >= 2) {
+                return "来回摆：加大 KP_VEL（每次 ×1.5）；还摆再减小 KP_POS";
+            }
+            if (ovDeg > 3.0) {
+                return "冲过头：减小 MAX_TURRET_DECEL，或加大 KP_VEL";
+            }
+            if (settle - rise > 0.3) {
+                return "到位后要磨一会儿：减小 KP_POS 或加大 KP_VEL";
+            }
+            if (ovDeg < 0.5 && rise > 0.8 * Math.abs(STEP_B_DEG - STEP_A_DEG) / Math.toDegrees(
+                    Math.max(AutoAimConfig.MAX_TURRET_VEL, 1e-3)) + 0.25) {
+                return "很稳但偏慢：加大 MAX_TURRET_DECEL 或 KP_POS";
+            }
+            return "不错。可以试着继续加大 MAX_TURRET_DECEL / KP_POS，直到开始过冲再退一点";
+        }
+
+        private String fmtTime(double t) {
+            return Double.isNaN(t) ? "没到" : String.format("%.2fs", t);
+        }
+    }
+
+    // =================================================================
+    // 工具
+    // =================================================================
+
+    /** 最小二乘拟合 功率 = kS + kV·速度。点是 {速度, 功率}，返回 {kS, kV}；点不够返回 null。 */
+    private static double[] fitLine(List<double[]> pts) {
+        int n = pts.size();
+        if (n < 2) {
+            return null;
+        }
+        double sx = 0, sy = 0, sxx = 0, sxy = 0;
+        for (double[] p : pts) {
+            sx += p[0];
+            sy += p[1];
+            sxx += p[0] * p[0];
+            sxy += p[0] * p[1];
+        }
+        double den = n * sxx - sx * sx;
+        if (Math.abs(den) < 1e-9) {
+            return null;
+        }
+        double slope = (n * sxy - sx * sy) / den;
+        double intercept = (sy - slope * sx) / n;
+        if (slope <= 0) {
+            return null;
+        }
+        return new double[]{intercept, slope};
+    }
+
+    private static double round(double v, int digits) {
+        double f = Math.pow(10, digits);
+        return Math.round(v * f) / f;
+    }
+}

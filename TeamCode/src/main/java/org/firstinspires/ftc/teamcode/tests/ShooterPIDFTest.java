@@ -21,14 +21,14 @@ import java.util.List;
 @Configurable
 public class ShooterPIDFTest extends LinearOpMode {
     // ticks/s
-    public static double SHOOT_VEL = 1840;
+    public static double SHOOT_VEL = 1760;
     public static double IDLE_VEL = 1000;
     public static boolean USE_PID = true;
     public static double VELOCITY_P = 0.006;
     public static double VELOCITY_I = 0;
     public static double VELOCITY_D = 0;
     public static boolean USE_F = true;
-    public static double VELOCITY_F = 0.00049;
+    public static double VELOCITY_F = 0.0004;
     public static double AT_SPEED_TOLERANCE = 60;
     public static double READY_TO_SHOOT_TOLERANCE = 60;
 
@@ -63,7 +63,7 @@ public class ShooterPIDFTest extends LinearOpMode {
             shooter.setVelocity(target);
             shooter.periodic();
 
-            double intakePower = gamepad1.a ? 0.9 : 0;
+            double intakePower = gamepad1.a ? 1 : 0;
             intake.setPower(intakePower);
             preShooter.setPower(intakePower);
 

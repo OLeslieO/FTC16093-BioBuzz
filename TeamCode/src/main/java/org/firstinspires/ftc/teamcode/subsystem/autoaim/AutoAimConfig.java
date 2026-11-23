@@ -9,7 +9,7 @@ public class AutoAimConfig {
     public static String SERVO_NAME_0 = "lala1";
     public static String SERVO_NAME_1 = "lala2";
 
-    /** 正功率 = 云台逆时针转（俯视），编码器读数随之增大"*/
+    /** 舵机位置增大 = 云台逆时针转（俯视），编码器读数随之增大 */
     public static boolean SERVO_REVERSED_0 = false;
     public static boolean SERVO_REVERSED_1 = false;
 
@@ -41,32 +41,41 @@ public class AutoAimConfig {
     public static double YAW_TRIM_DEG = 0.0;
 
 
-    public static double KP_POS = 1.4;
+    // ---- 舵机位置模式 ----
+    // 舵机位置 = CENTER_POS + 云台角度(°) / TURRET_DEG_PER_POS。
+    // 用 TurretPositionServoTest MODE 4 标定，标完把结果抄到这里。
 
-    public static double MAX_TURRET_VEL = 2.269; // TurretServoTest MAX_VEL_DPS 130°/s ÷ 57.3
+    /** 舵机位置变化 1.0 云台转多少度。默认按舵机 300° 行程、舵机:云台 = 4:3 估的，需实测。 */
+    public static double TURRET_DEG_PER_POS = 403;
+    /** 云台 0°（正前方）对应的舵机位置。 */
+    public static double CENTER_POS = 0.5;
 
+    /** 舵机 PWM 范围（µs）。Axon / goBILDA 全行程一般 500~2500，SDK 默认 600~2400。 */
+    public static double PWM_MIN_US = 500.0;
+    public static double PWM_MAX_US = 2500.0;
+
+    /** 舵机 1 相对舵机 0 的位置微调，两个舵机咬同一个齿轮，0 点不一致会互相顶着发热。 */
+    public static double SERVO_1_TRIM = 0.0;
+
+    /** 超前补偿（s）：目标在动时多转 前馈角速度 × 这个时间，抵消舵机跟随滞后。追不上就加大。 */
+    public static double SERVO_LEAD_TIME = 0.05;
+
+    /** 指令角度限速（rad/s），0 = 不限速。舵机冲太猛、过冲大时打开。 */
+    public static double MAX_TURRET_VEL = 0.0;
+
+    /** 用编码器修正稳态误差的积分增益（1/s），0 = 纯开环。齿隙或标定不准时再开。 */
+    public static double TRIM_KI = 0.0;
+    /** 误差小于这个才积分。 */
+    public static double TRIM_WINDOW_DEG = 3.0;
+    public static double TRIM_MAX_DEG = 5.0;
+
+    /** 积分修正的死区。 */
     public static double DEADBAND_DEG = 0.5;
 
-
-    public static double kS = 0.13;
-
-    public static double kV = 0.01; // TurretServoTest 0.006 /(°/s) × 57.3
-
-    public static double kA = 0.0;
-
-    /** 速度指令（rad/s）超过这个值才加 kS。= TurretServoTest 的 KS_MIN_VEL_DPS 3.6°/s ÷ 57.3 */
-    public static double KS_MIN_VEL = 0.063;
-
-
+    /** 前馈角速度（rad/s）的软死区，底盘静止时滤掉定位噪声。 */
     public static double FF_DEADBAND = 0.05;
 
-    public static double KP_VEL = 0.086; // TurretServoTest 0.0015 /(°/s) × 57.3
-
     public static double VEL_FILTER_ALPHA = 0.5;
-
-    public static double CMD_ACCEL_FILTER_ALPHA = 0.15;
-
-    public static double MAX_POWER = 1.0;
 
 
     public static double CHASSIS_VEL_FILTER_ALPHA = 0.3;

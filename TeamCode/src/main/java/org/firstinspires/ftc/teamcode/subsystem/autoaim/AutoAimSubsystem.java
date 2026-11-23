@@ -6,11 +6,13 @@ import com.pedropathing.ivy.Command;
 import com.pedropathing.math.Pose;
 import com.pedropathing.math.Velocity;
 import com.pedropathing.utils.Angle;
-import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
+import com.qualcomm.robotcore.hardware.PwmControl;
+import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.hardware.ServoImplEx;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.util.Alliance;
@@ -19,9 +21,15 @@ import java.util.Objects;
 import java.util.function.Supplier;
 
 
+/**
+ * 自瞄云台。两个舵机工作在位置模式（舵机自己闭环），这里只算目标角并换算成舵机位置；
+ * Through Bore 编码器用来读实际角度（判断锁定、可选的稳态误差修正）。
+ *
+ * <p>舵机位置 = CENTER_POS + 角度 / TURRET_DEG_PER_POS，用 TurretPositionServoTest MODE 4 标定。
+ */
 public class AutoAimSubsystem {
 
-    private final CRServo[] servos;
+    private final ServoImplEx[] servos;
     private final DcMotorEx encoder;
     private final Supplier<Pose> poseSupplier;
     private final Supplier<Velocity> velocitySupplier;
@@ -36,8 +44,6 @@ public class AutoAimSubsystem {
 
     private long lastTimeNanos = 0;
     private boolean hasHistory = false;
-    private double lastVelocityCommand = 0.0;
-    private double filteredAccelCommand = 0.0;
 
     private double filteredVelocity = 0.0;
 
@@ -46,9 +52,15 @@ public class AutoAimSubsystem {
     private double targetAngle = 0.0;
     private double error = 0.0;
     private double feedforwardVelocity = 0.0;
-    private double velocityCommand = 0.0;
     private double measuredVelocity = 0.0;
-    private double power = 0.0;
+    /** 实际发给舵机的角度（rad）：目标 + 超前补偿 + 修正，经过限速。 */
+    private double commandAngle = 0.0;
+    /** 编码器积分修正量（rad）。 */
+    private double trim = 0.0;
+    private double servoPosition = Double.NaN;
+    private boolean pwmEnabled = false;
+    private double appliedPwmMin = Double.NaN;
+    private double appliedPwmMax = Double.NaN;
     private double tolerance = 0.0;
     private boolean reachable = true;
     private boolean locked = false;
@@ -65,11 +77,14 @@ public class AutoAimSubsystem {
         this.poseSupplier = Objects.requireNonNull(poseSupplier);
         this.velocitySupplier = Objects.requireNonNull(velocitySupplier);
 
-        servos = new CRServo[]{
-                hardwareMap.get(CRServo.class, AutoAimConfig.SERVO_NAME_0),
-                hardwareMap.get(CRServo.class, AutoAimConfig.SERVO_NAME_1)
+        // 硬件配置里这两个口要设成 Servo，不是 Continuous Rotation Servo
+        servos = new ServoImplEx[]{
+                hardwareMap.get(ServoImplEx.class, AutoAimConfig.SERVO_NAME_0),
+                hardwareMap.get(ServoImplEx.class, AutoAimConfig.SERVO_NAME_1)
         };
-        applyServoDirections();
+        applyServoConfig();
+        // 开瞄准之前不给 PWM，INIT 时云台不会突然转
+        setPwmEnabled(false);
 
         encoder = hardwareMap.get(DcMotorEx.class, AutoAimConfig.ENCODER_NAME);
         if (resetEncoder) {
@@ -88,8 +103,7 @@ public class AutoAimSubsystem {
         enabled = false;
         holding = false;
         locked = false;
-        power = 0.0;
-        setServoPower(0.0);
+        setPwmEnabled(false);
     }
 
     public boolean isEnabled() {
@@ -114,13 +128,43 @@ public class AutoAimSubsystem {
         holding = false;
         resetFilters();
         if (!enabled) {
-            power = 0.0;
-            setServoPower(0.0);
+            setPwmEnabled(false);
         }
     }
 
     public boolean isHolding() {
         return holding;
+    }
+
+    // ---- 调参用：最近一圈控制器的内部量 ----
+
+    /** 最近一次发给舵机 0 的位置（0~1），没开 PWM 时为 NaN。 */
+    public double getServoPosition() {
+        return servoPosition;
+    }
+
+    /** 实际发给舵机的角度（rad）。 */
+    public double getCommandAngle() {
+        return commandAngle;
+    }
+
+    /** 编码器积分修正量（rad）。 */
+    public double getTrim() {
+        return trim;
+    }
+
+    /** 目标角 − 当前角（rad）。 */
+    public double getError() {
+        return error;
+    }
+
+    public double getTargetAngle() {
+        return targetAngle;
+    }
+
+    /** 滤波后的云台实测速度（rad/s）。 */
+    public double getMeasuredVelocity() {
+        return measuredVelocity;
     }
 
     public void setShootOnTheMove(boolean shootOnTheMove) {
@@ -184,7 +228,7 @@ public class AutoAimSubsystem {
         long now = System.nanoTime();
         double dt = hasHistory ? Math.max((now - lastTimeNanos) / 1e9, 1e-3) : 0.0;
         lastTimeNanos = now;
-        applyServoDirections();
+        applyServoConfig();
 
         Pose robot = poseSupplier.get();
         predictor.update(robot, velocitySupplier.get(), dt);
@@ -218,9 +262,7 @@ public class AutoAimSubsystem {
         filteredVelocity += AutoAimConfig.VEL_FILTER_ALPHA * (getTurretVelocity() - filteredVelocity);
         measuredVelocity = filteredVelocity;
         targetAngle = TurretAimCalculator.chooseTurretAngle(
-                desired, current,
-                Math.toRadians(AutoAimConfig.MIN_ANGLE_DEG),
-                Math.toRadians(AutoAimConfig.MAX_ANGLE_DEG));
+                desired, current, minAngle(), maxAngle());
         reachable = Math.abs(Angle.normalizeSigned(desired - targetAngle)) < 1e-6;
         error = targetAngle - current;
 
@@ -258,14 +300,12 @@ public class AutoAimSubsystem {
         long now = System.nanoTime();
         double dt = hasHistory ? Math.max((now - lastTimeNanos) / 1e9, 1e-3) : 0.0;
         lastTimeNanos = now;
-        applyServoDirections();
+        applyServoConfig();
 
         double current = getTurretAngle();
         filteredVelocity += AutoAimConfig.VEL_FILTER_ALPHA * (getTurretVelocity() - filteredVelocity);
         measuredVelocity = filteredVelocity;
-        targetAngle = clip(holdAngle,
-                Math.toRadians(AutoAimConfig.MIN_ANGLE_DEG),
-                Math.toRadians(AutoAimConfig.MAX_ANGLE_DEG));
+        targetAngle = clip(holdAngle, minAngle(), maxAngle());
         reachable = true;
         error = targetAngle - current;
         feedforwardVelocity = 0.0;
@@ -274,36 +314,49 @@ public class AutoAimSubsystem {
         locked = false;
     }
 
-    /** 位置环 → 目标角速度 → kS / kV / kA 前馈 + 速度环 → 舵机功率。用 error、feedforwardVelocity、measuredVelocity。 */
+    /**
+     * 目标角 → 舵机位置。舵机自己做位置闭环，这里只做三件事：
+     * <ol>
+     *   <li>超前补偿：目标在动时多给 feedforwardVelocity × SERVO_LEAD_TIME，抵消舵机跟随的滞后；</li>
+     *   <li>可选的编码器积分修正（TRIM_KI），补齿隙 / 标定误差带来的稳态偏差；</li>
+     *   <li>可选的限速（MAX_TURRET_VEL），舵机冲得太猛时打开。</li>
+     * </ol>
+     */
     private void driveTurret(double current, double dt) {
-        // 软死区：从死区边缘连续地长出来，不会在边缘处突然跳一个速度指令
-        double positionVelocity = AutoAimConfig.KP_POS
-                * softDeadband(error, Math.toRadians(AutoAimConfig.DEADBAND_DEG));
-        velocityCommand = clip(positionVelocity + feedforwardVelocity,
-                -AutoAimConfig.MAX_TURRET_VEL, AutoAimConfig.MAX_TURRET_VEL);
+        double lo = minAngle();
+        double hi = maxAngle();
 
-        double rawAccelCommand = dt > 0.0 ? (velocityCommand - lastVelocityCommand) / dt : 0.0;
-        filteredAccelCommand += AutoAimConfig.CMD_ACCEL_FILTER_ALPHA
-                * (rawAccelCommand - filteredAccelCommand);
-        lastVelocityCommand = velocityCommand;
+        // 只在快到位、目标不怎么动时积分，避免运动过程中积出一大坨
+        if (AutoAimConfig.TRIM_KI > 0.0
+                && Math.abs(error) < Math.toRadians(AutoAimConfig.TRIM_WINDOW_DEG)
+                && Math.abs(feedforwardVelocity) < 1e-6) {
+            double trimError = softDeadband(error, Math.toRadians(AutoAimConfig.DEADBAND_DEG));
+            double maxTrim = Math.toRadians(AutoAimConfig.TRIM_MAX_DEG);
+            trim = clip(trim + AutoAimConfig.TRIM_KI * trimError * dt, -maxTrim, maxTrim);
+        } else if (AutoAimConfig.TRIM_KI <= 0.0) {
+            trim = 0.0;
+        }
+
+        double desiredCommand = clip(
+                targetAngle + feedforwardVelocity * AutoAimConfig.SERVO_LEAD_TIME + trim, lo, hi);
+
+        if (!hasHistory) {
+            commandAngle = current;
+        }
+        if (AutoAimConfig.MAX_TURRET_VEL > 0.0 && dt > 0.0) {
+            double step = AutoAimConfig.MAX_TURRET_VEL * dt;
+            commandAngle += clip(desiredCommand - commandAngle, -step, step);
+        } else {
+            commandAngle = desiredCommand;
+        }
         hasHistory = true;
 
-        // 和 TurretServoTest 一样：速度指令超过 KS_MIN_VEL 才加满额 kS，否则不加
-        double staticFriction = Math.abs(velocityCommand) > AutoAimConfig.KS_MIN_VEL
-                ? Math.copySign(AutoAimConfig.kS, velocityCommand) : 0.0;
-        double rawPower = staticFriction
-                + AutoAimConfig.kV * velocityCommand
-                + AutoAimConfig.kA * filteredAccelCommand
-                + AutoAimConfig.KP_VEL * (velocityCommand - measuredVelocity);
-
-        power = applyLimits(clip(rawPower, -AutoAimConfig.MAX_POWER, AutoAimConfig.MAX_POWER), current);
-        setServoPower(power);
+        setServoAngle(commandAngle);
     }
 
     private void resetFilters() {
         hasHistory = false;
-        lastVelocityCommand = 0.0;
-        filteredAccelCommand = 0.0;
+        trim = 0.0;
         predictor.reset();
         filteredVelocity = getTurretVelocity();
     }
@@ -352,34 +405,71 @@ public class AutoAimSubsystem {
         return (AutoAimConfig.ENCODER_REVERSED ? -1.0 : 1.0) * motorDirSign;
     }
 
-    /** 方向每圈重设，这样 Panels 里实时翻转 SERVO_REVERSED_x 立刻生效。 */
-    private void applyServoDirections() {
+    /** 方向、PWM 范围每圈检查，Panels 里改了立刻生效；PWM 范围只在变化时才写硬件。 */
+    private void applyServoConfig() {
         servos[0].setDirection(AutoAimConfig.SERVO_REVERSED_0
-                ? DcMotorSimple.Direction.REVERSE : DcMotorSimple.Direction.FORWARD);
+                ? Servo.Direction.REVERSE : Servo.Direction.FORWARD);
         servos[1].setDirection(AutoAimConfig.SERVO_REVERSED_1
-                ? DcMotorSimple.Direction.REVERSE : DcMotorSimple.Direction.FORWARD);
+                ? Servo.Direction.REVERSE : Servo.Direction.FORWARD);
+        if (AutoAimConfig.PWM_MIN_US != appliedPwmMin || AutoAimConfig.PWM_MAX_US != appliedPwmMax) {
+            PwmControl.PwmRange range =
+                    new PwmControl.PwmRange(AutoAimConfig.PWM_MIN_US, AutoAimConfig.PWM_MAX_US);
+            for (ServoImplEx servo : servos) {
+                servo.setPwmRange(range);
+            }
+            appliedPwmMin = AutoAimConfig.PWM_MIN_US;
+            appliedPwmMax = AutoAimConfig.PWM_MAX_US;
+        }
     }
 
-    private void setServoPower(double p) {
-        for (CRServo servo : servos) {
-            servo.setPower(p);
+    private void setPwmEnabled(boolean on) {
+        if (!on) {
+            servoPosition = Double.NaN;
         }
+        if (on == pwmEnabled) {
+            return;
+        }
+        for (ServoImplEx servo : servos) {
+            if (on) {
+                servo.setPwmEnable();
+            } else {
+                servo.setPwmDisable();
+            }
+        }
+        pwmEnabled = on;
+    }
+
+    /** 云台角（rad）→ 舵机位置。舵机 1 额外加 SERVO_1_TRIM，让两个舵机不互相顶。 */
+    private void setServoAngle(double angleRad) {
+        servoPosition = clip(angleToServoPosition(angleRad), 0.0, 1.0);
+        servos[0].setPosition(servoPosition);
+        servos[1].setPosition(clip(servoPosition + AutoAimConfig.SERVO_1_TRIM, 0.0, 1.0));
+        setPwmEnabled(true);
+    }
+
+    private static double angleToServoPosition(double angleRad) {
+        return AutoAimConfig.CENTER_POS + Math.toDegrees(angleRad) / AutoAimConfig.TURRET_DEG_PER_POS;
+    }
+
+    private static double servoPositionToAngle(double position) {
+        return Math.toRadians((position - AutoAimConfig.CENTER_POS) * AutoAimConfig.TURRET_DEG_PER_POS);
     }
 
     // ---------------------------------------------------------------
     // 限位 / 遥测
     // ---------------------------------------------------------------
 
-    /** 贴近机械限位时，不允许继续朝限位方向输出。 */
-    private static double applyLimits(double power, double currentAngle) {
-        double margin = Math.toRadians(AutoAimConfig.LIMIT_MARGIN_DEG);
-        if (power > 0.0 && currentAngle >= Math.toRadians(AutoAimConfig.MAX_ANGLE_DEG) - margin) {
-            return 0.0;
-        }
-        if (power < 0.0 && currentAngle <= Math.toRadians(AutoAimConfig.MIN_ANGLE_DEG) + margin) {
-            return 0.0;
-        }
-        return power;
+    /** 可用范围 = 机械限位（留 LIMIT_MARGIN）∩ 舵机 0~1 能到的范围。 */
+    private static double minAngle() {
+        double mech = Math.toRadians(AutoAimConfig.MIN_ANGLE_DEG + AutoAimConfig.LIMIT_MARGIN_DEG);
+        double servo = Math.min(servoPositionToAngle(0.0), servoPositionToAngle(1.0));
+        return Math.max(mech, servo);
+    }
+
+    private static double maxAngle() {
+        double mech = Math.toRadians(AutoAimConfig.MAX_ANGLE_DEG - AutoAimConfig.LIMIT_MARGIN_DEG);
+        double servo = Math.max(servoPositionToAngle(0.0), servoPositionToAngle(1.0));
+        return Math.min(mech, servo);
     }
 
     private void sendTelemetry() {
@@ -402,8 +492,9 @@ public class AutoAimSubsystem {
         telemetry.addData("Aim Error", "%.2f° (tol %.2f°)", Math.toDegrees(error), Math.toDegrees(tolerance));
         telemetry.addData("Turret Vel", "%.1f°/s (ff %.1f°/s)",
                 Math.toDegrees(measuredVelocity), Math.toDegrees(feedforwardVelocity));
-        telemetry.addData("Turret Vel Cmd", "%.1f°/s", Math.toDegrees(velocityCommand));
-        telemetry.addData("Turret Power", "%.3f", power);
+        telemetry.addData("Turret Cmd", "%.1f° (trim %.2f°)",
+                Math.toDegrees(commandAngle), Math.toDegrees(trim));
+        telemetry.addData("Turret Servo Pos", "%.3f", servoPosition);
         telemetry.addData("Chassis Speed", "%.1f in/s", predictor.speed());
         if (shot != null) {
             telemetry.addData("Shot Distance", "%.1f in", shot.distance);
