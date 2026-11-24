@@ -2,7 +2,6 @@ package org.firstinspires.ftc.teamcode.opmodes;
 
 import static com.pedropathing.ivy.commands.Commands.instant;
 import static com.pedropathing.ivy.commands.Commands.waitMs;
-import static com.pedropathing.ivy.commands.Commands.waitUntil;
 import static com.pedropathing.ivy.groups.Groups.sequential;
 
 import com.bylazar.telemetry.JoinedTelemetry;
@@ -167,7 +166,7 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
     }
 
     /** 开自瞄 + shooter 加速 + transfer 一直转。 */
-    protected Command startShooting() {
+    protected Command startAuto() {
         return instant(() -> {
             aim.enable();
             shooter.accelerate();

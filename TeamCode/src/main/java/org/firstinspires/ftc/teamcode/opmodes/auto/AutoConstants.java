@@ -31,68 +31,66 @@ public class AutoConstants {
 
     // ================= 起点 =================
 
-    /** 下方起点：RedFull / RedFullPark / RedHalfParkBottom。 */
-    public static FieldPoint START_BOTTOM = new FieldPoint(55.64, 7.677, 90);
-    /** 上方起点：RedHalfTop。 */
-    public static FieldPoint START_TOP = new FieldPoint(31.8, 133.823, -90);
-    /** LeavePark 起点。 */
-    public static FieldPoint LEAVE_START = new FieldPoint(11.38, 136.1, -90);
+    /** 起点（下方）。 */
+    public static FieldPoint START_BOT_VER = new FieldPoint(55.6, 6.7, 90);
+    public static FieldPoint START_BOT_STRAFE = new FieldPoint(53.5,9.5,180);
+
+    // ================= 中间一排 =================
+
+    /** startToPrepmid 终点：中间一排吸球准备点。 */
+    public static FieldPoint PREP_MID = new FieldPoint(22.13, 46.85, 180);
+    /** prepmidToFlowermid 终点：中间一排吸球终点。 */
+    public static FieldPoint FLOWER_MID = new FieldPoint(17.83, 46.5, 180);
+    /** flowermidToPrepmid 终点：吸完退回的准备点。 */
+    public static FieldPoint PREP_MID_2 = new FieldPoint(22.13, 46.85, 180);
 
     // ================= 射球点 =================
 
-    /** 下方射球点：朝向 90（开局）/ 180 / -90 都有用到。 */
-    public static FieldPoint SHOOT_BOTTOM = new FieldPoint(55.84, 21.6, 90);
-    /** 上方射球点：朝向 180 / -90 都有用到。 */
-    public static FieldPoint SHOOT_TOP = new FieldPoint(58.19, 119.72, 180);
+    /** prepmidToShoottop 终点：上方射球点。 */
+    public static FieldPoint SHOOT_TOP = new FieldPoint(40.12, 117.09, 90);
+    /** prepmidToShoottop 控制点。 */
+    public static FieldPoint CTRL_PREP_MID_TO_SHOOT_TOP = new FieldPoint(25.8934, 118.0229, 0);
+    /** loadbotToShoottop 终点：第二次上方射球点。 */
+    public static FieldPoint SHOOT_TOP_2 = new FieldPoint(40.12, 117.09, -90);
 
-    // ================= 吸球点 =================
+    // ================= 上方一排 =================
 
-    /** 中间一排吸球准备点。 */
-    public static FieldPoint POLLEN_MID_PREP = new FieldPoint(26.57, 44.09, 180);
-    /** 中间一排吸球终点。 */
-    public static FieldPoint POLLEN_MID = new FieldPoint(18.62, 44.09, 180);
+    /** shoottopToPreptop 终点：上方吸球准备点。 */
+    public static FieldPoint PREP_TOP = new FieldPoint(48.78,121.81, 90);
+    /** preptopToFlowertop 终点：上方吸球终点。 */
+    public static FieldPoint FLOWER_TOP = new FieldPoint(48.86, 126.81, 90);
 
-    /** 上方吸球准备点（RedFull / RedFullPark / RedHalfTop）。 */
-    public static FieldPoint POLLEN_TOP_PREP = new FieldPoint(43.27, 119.37, 90);
-    /** 上方吸球终点。 */
-    public static FieldPoint POLLEN_TOP = new FieldPoint(43.27, 124.96, 90);
+    // ================= 下方装填区 =================
 
-    /** 下方吸球准备点（RedHalfParkBottom）。 */
-    public static FieldPoint POLLEN_BOTTOM_PREP = new FieldPoint(23.5, 8.9, 180);
-    /** 下方吸球终点（RedHalfParkBottom）。 */
-    public static FieldPoint POLLEN_BOTTOM = new FieldPoint(9.8283, 8.9, 180);
+    /** flowertopToPrepbot 终点：装填区准备点。 */
+    public static FieldPoint PREP_BOT = new FieldPoint(9.09, 20.59, 270);
+    /** prepbotToLoadbot 终点：装填区。 */
+    public static FieldPoint LOAD_BOT = new FieldPoint(9, 10.2, -90);
 
-    /** 左下角吸球点（RedFull 第三次吸球）。 */
-    public static FieldPoint POLLEN_CORNER_PREP = new FieldPoint(9.02, 25.24, -90);
+    // ================= 下方装填区 2（Full2TipV666） =================
 
-    public static FieldPoint POLLEN_CORNER = new FieldPoint(8.14, 15.2, -90);
+    /** startToPrepbot2 终点：装填区 2 准备点。 */
+    public static FieldPoint PREP_BOT_2 = new FieldPoint(20.428, 9.0927, 180);
+    /** prepbot2ToLoadbot2 终点：装填区 2。 */
+    public static FieldPoint LOAD_BOT_2 = new FieldPoint(10.124, 8.955, 180);
+
+    // ================= Full2TipV666 控制点 =================
+
+    /** loadbot2ToShoottop2 控制点。 */
+    public static FieldPoint CTRL_LOAD_BOT_2_TO_SHOOT_TOP_2 = new FieldPoint(27.0976, 28.9747, 0);
+    /** shoottop2ToFlowertop 控制点。 */
+    public static FieldPoint CTRL_SHOOT_TOP_2_TO_FLOWER_TOP = new FieldPoint(48.149, 119.8617, 0);
+    /** flowertopToShoottop2 控制点。 */
+    public static FieldPoint CTRL_FLOWER_TOP_TO_SHOOT_TOP_2 = new FieldPoint(48.2024, 119.8973, 0);
+    /** shoottop2ToPrepmid 控制点。 */
+    public static FieldPoint CTRL_SHOOT_TOP_2_TO_PREP_MID = new FieldPoint(26.8992, 44.7676, 0);
+    /** flowermidToShoottop2 控制点。 */
+    public static FieldPoint CTRL_FLOWER_MID_TO_SHOOT_TOP_2 = new FieldPoint(29.9277, 53.1055, 0);
 
     // ================= 停车点 =================
 
-    /** 上方停车点：RedFullPark / RedHalfTop。 */
-    public static FieldPoint PARK_TOP = new FieldPoint(20.63, 120.67, 180);
-    /** RedHalfParkBottom 停车点。 */
-    public static FieldPoint PARK_MID = new FieldPoint(10.0985, 92.0653, 90);
-    /** LeavePark 终点。 */
-    public static FieldPoint LEAVE_END = new FieldPoint(11.22, 128.07, -90);
-
-
-    /** START_TOP → SHOOT_TOP（RedHalfTop）。 */
-    public static FieldPoint CTRL_START_TOP_TO_SHOOT_TOP = new FieldPoint(31.466, 119.2664, 0);
-    /** POLLEN_MID → SHOOT_TOP（RedFull / RedFullPark）。 */
-    public static FieldPoint CTRL_MID_TO_SHOOT_TOP = new FieldPoint(23.2677, 118.5011, 0);
-    /** POLLEN_MID → SHOOT_BOTTOM（RedHalfParkBottom）。 */
-    public static FieldPoint CTRL_MID_TO_SHOOT_BOTTOM = new FieldPoint(39.5681, 27.1593, 0);
-    /** POLLEN_TOP → SHOOT_TOP（RedFull / RedFullPark / RedHalfTop）。 */
-    public static FieldPoint CTRL_TOP_TO_SHOOT_TOP = new FieldPoint(46.9869, 118.4687, 0);
-    /** SHOOT_TOP → POLLEN_CORNER 第一个控制点（RedFull）。 */
-    public static FieldPoint CTRL_SHOOT_TOP_TO_CORNER_1 = new FieldPoint(16.8889, 118.9597, 0);
-    /** SHOOT_TOP → POLLEN_CORNER 第二个控制点（RedFull）。 */
-    public static FieldPoint CTRL_SHOOT_TOP_TO_CORNER_2 = new FieldPoint(22.708, 22.5241, 0);
-    /** SHOOT_BOTTOM → PARK_MID 第一个控制点（RedHalfParkBottom）。 */
-    public static FieldPoint CTRL_PARK_MID_1 = new FieldPoint(8.7652, 47.0611, 0);
-    /** SHOOT_BOTTOM → PARK_MID 第二个控制点（RedHalfParkBottom）。 */
-    public static FieldPoint CTRL_PARK_MID_2 = new FieldPoint(27.7804, 80.5219, 0);
+    /** shoottopToPark 终点。 */
+    public static FieldPoint PARK = new FieldPoint(12.44, 118.19205, 180);
 
     private AutoConstants() {
     }

@@ -40,8 +40,8 @@ import org.firstinspires.ftc.teamcode.util.FieldConstants;
 public class AutoAimTeleOp extends CommandOpModeEx {
 
     /** 没有 auto 传过来的位姿时用这个起点（红方坐标，蓝方自动镜像）。 */
-    public static double START_X = 56.0;
-    public static double START_Y = 8.0;
+    public static double START_X = 55.6;
+    public static double START_Y = 6.7;
     public static double START_HEADING_DEG = 90.0;
 
     public static double SLOW_SCALE = 0.35;
@@ -49,7 +49,7 @@ public class AutoAimTeleOp extends CommandOpModeEx {
     public static double BRAKE_STICK_THRESHOLD = 0.05;
 
     /** shooter 固定转速（ticks/s），Panels 里改实时生效。 */
-    public static double SHOOTER_VEL = 1700.0;
+    public static double SHOOTER_VEL = 1540;
     /** true = 只有锁定且到速才开 gate（按住扳机等它就绪）。 */
     public static boolean REQUIRE_READY_TO_SHOOT = false;
 

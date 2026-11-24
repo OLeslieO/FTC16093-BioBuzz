@@ -18,8 +18,8 @@ import org.firstinspires.ftc.teamcode.subsystem.PPDriveSubsystem;
 @Configurable
 public class LocalizationTest extends LinearOpMode {
 
-    public static double START_X = 55.64;
-    public static double START_Y = 7.677;
+    public static double START_X = 55.6;
+    public static double START_Y = 6.7;
     public static double START_HEADING_DEG = 90.0;
 
     /** 慢速模式下的底盘功率系数。 */
