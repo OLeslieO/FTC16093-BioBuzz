@@ -18,8 +18,8 @@ public class FieldConstants {
     // 红方云台瞄准点（Pedro 坐标系实测）， 两个可切换：0 号为默认
     public static double RED_AIM_X = 57.7;
     public static double RED_AIM_Y = 53.0;
-    public static double RED_AIM_X_1 = 57.7;
-    public static double RED_AIM_Y_1 = 88.5;
+    public static double RED_AIM_X_1 = 64.7;
+    public static double RED_AIM_Y_1 = 87;
 
 
     public static int AIM_POINT_INDEX = 0;

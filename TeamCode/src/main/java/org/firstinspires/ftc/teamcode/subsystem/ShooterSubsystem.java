@@ -38,7 +38,7 @@ public class ShooterSubsystem extends SubsystemBase {
      *   30.31，38.31，41.50，46.35，49.26，51.39。
      */
     public static double[] SHOT_DIST_IN = {30.31, 38.31, 41.50, 46.35, 49.26, 51.39};
-    public static double[] SHOT_VEL = {1090.0, 1110.0, 1150.0, 1160.0, 1190.0, 1210.0};
+    public static double[] SHOT_VEL = {1090.0, 1110.0, 1150.0, 1170.0, 1120.0, 1220.0};
     public static boolean EXTRAPOLATE = true;
     public static double MIN_SHOT_VEL = 1000.0;
     public static double MAX_SHOT_VEL = 1350.0;
