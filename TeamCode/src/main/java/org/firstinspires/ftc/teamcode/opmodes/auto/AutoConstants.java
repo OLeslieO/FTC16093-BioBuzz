@@ -32,44 +32,46 @@ public class AutoConstants {
     // ================= 起点 =================
 
     /** 起点（下方）。 */
-    public static FieldPoint START_BOT_VER = new FieldPoint(55.6, 6.7, 90);
+    public static FieldPoint START_BOT_VER = new FieldPoint(55.6255, 6.6967, 90);
     public static FieldPoint START_BOT_STRAFE = new FieldPoint(53.5,9.5,180);
 
     // ================= 中间一排 =================
 
     /** startToPrepmid 终点：中间一排吸球准备点。 */
-    public static FieldPoint PREP_MID = new FieldPoint(22.13, 46.85, 180);
+    public static FieldPoint PREP_MID = new FieldPoint(19.507, 47.3346, 180);
     /** prepmidToFlowermid 终点：中间一排吸球终点。 */
-    public static FieldPoint FLOWER_MID = new FieldPoint(17.83, 46.5, 180);
+    public static FieldPoint FLOWER_MID = new FieldPoint(13.2942, 47.0452, 180);
     /** flowermidToPrepmid 终点：吸完退回的准备点。 */
-    public static FieldPoint PREP_MID_2 = new FieldPoint(22.13, 46.85, 180);
+    public static FieldPoint PREP_MID_2 = new FieldPoint(19.9626, 47.2571, 180);
 
     // ================= 射球点 =================
 
     /** prepmidToShoottop 终点：上方射球点。 */
-    public static FieldPoint SHOOT_TOP = new FieldPoint(40.12, 117.09, 90);
+    public static FieldPoint SHOOT_TOP = new FieldPoint(40.7934, 123.486, 90);
     /** prepmidToShoottop 控制点。 */
     public static FieldPoint CTRL_PREP_MID_TO_SHOOT_TOP = new FieldPoint(25.8934, 118.0229, 0);
     /** loadbotToShoottop 终点：第二次上方射球点。 */
-    public static FieldPoint SHOOT_TOP_2 = new FieldPoint(40.12, 117.09, -90);
+    public static FieldPoint SHOOT_TOP_2 = new FieldPoint(40.8187, 123.4112, -90);
 
     // ================= 上方一排 =================
 
     /** shoottopToPreptop 终点：上方吸球准备点。 */
     public static FieldPoint PREP_TOP = new FieldPoint(48.78,121.81, 90);
     /** preptopToFlowertop 终点：上方吸球终点。 */
-    public static FieldPoint FLOWER_TOP = new FieldPoint(48.86, 126.81, 90);
+    public static FieldPoint FLOWER_TOP = new FieldPoint(46.7426, 133.3006, 90);
 
     // ================= 下方装填区 =================
-    public static FieldPoint CTRL_FLOWERTOP_PREPBOT_1 = new FieldPoint(24.5152, 127.5667, 0);
+    public static FieldPoint CTRL_FLOWERTOP_PREPBOT_1 = new FieldPoint(23.3503, 126.6348, 0);
     public static FieldPoint CTRL_FLOWERTOP_PREPBOT_2 = new FieldPoint(33.8294, 26.9064, 0);
+    /** flowertopToPrepbot 分段朝向：前多少比例保持 90°，之后再转向 -90°。 */
+    public static double FLOWERTOP_PREPBOT_HOLD_T = 0.15;
 
 
 
     /** flowertopToPrepbot 终点：装填区准备点。 */
-    public static FieldPoint PREP_BOT = new FieldPoint(9.09, 20.59, 270);
+    public static FieldPoint PREP_BOT = new FieldPoint(10.6242, 20.2698, 270);
     /** prepbotToLoadbot 终点：装填区。 */
-    public static FieldPoint LOAD_BOT = new FieldPoint(9, 10.2, -90);
+    public static FieldPoint LOAD_BOT = new FieldPoint(10.6114, 8.0043, -90.0596);
 
     // ================= 下方装填区 2（Full2TipV666） =================
 
@@ -94,7 +96,7 @@ public class AutoConstants {
     // ================= 停车点 =================
 
     /** shoottopToPark 终点。 */
-    public static FieldPoint PARK = new FieldPoint(12.44, 118.19205, 180);
+    public static FieldPoint PARK = new FieldPoint(7.4231, 120.9205, 180);
 
     private AutoConstants() {
     }

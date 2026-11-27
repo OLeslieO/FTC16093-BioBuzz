@@ -36,11 +36,11 @@ import org.firstinspires.ftc.teamcode.util.FieldConstants;
  * </ul>
  * 云台锁定 + shooter 到速时手柄震一下。
  */
-@TeleOp(name = "AutoAim TeleOp", group = "main")
+@TeleOp(name = "TeleOp Solo", group = "main")
 @Configurable
-public class AutoAimTeleOp extends CommandOpModeEx {
+public class TeleopSolo extends CommandOpModeEx {
 
-    /** 没有 auto 传过来的位姿时用这个起点（红方坐标，蓝方自动镜像）。 */
+    /** 没有 auto 的handoff时用这个起点（红方坐标，蓝方自动镜像）。 */
     public static double START_X = 55.6;
     public static double START_Y = 6.7;
     public static double START_HEADING_DEG = 90.0;

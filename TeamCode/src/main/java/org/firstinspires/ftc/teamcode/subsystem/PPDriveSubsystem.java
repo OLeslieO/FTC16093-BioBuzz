@@ -239,7 +239,7 @@ public class PPDriveSubsystem {
         }
 
         setPose(transferredPose);
-        // 读完就清：只有紧跟在 auto 后面的那一次 TeleOp 会用到这个位姿
+        //只有在 auto 后面的那一次 TeleOp 会用到
         clearTransferredPose();
         return true;
     }

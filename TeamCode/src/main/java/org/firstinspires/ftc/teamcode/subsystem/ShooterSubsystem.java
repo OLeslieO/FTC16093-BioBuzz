@@ -16,35 +16,26 @@ import java.util.function.DoubleSupplier;
 public class ShooterSubsystem extends SubsystemBase {
 
     public enum State {
-        /** 加速。 */
         ACCELERATE,
-        /** 空转。 */
         IDLE,
-        /** 停止。 */
         STOP,
-        /** 固定目标速度，用 setVelocity 设置。 */
         CUSTOM
     }
 
     public static String SHOOTER_UP_NAME = "shooterUp";
     public static String SHOOTER_DOWN_NAME = "shooterDown";
 
-    // ---------- 目标（ticks/s） ----------
     public static double ACCELERATE_VEL = 1160;
     public static double IDLE_VEL = 800.0;
     public static double STOP_VEL = 0.0;
 
-    // ---------- 按距离查表的射速（移动射球用） ----------
-    /** 打开后 ACCELERATE 档按距离查表；关闭或没有距离来源时用固定的 ACCELERATE_VEL。 */
     public static boolean USE_DISTANCE_TABLE = true;
     /**
-     * 距离（英寸，云台旋转轴到瞄准点 / 边走边射时的虚拟目标，必须递增）-> 射速（ticks/s）。
-     * 实测（机器人坐标 -> 射速），PIDF: p=0.0064, i=0, d=0, f=0.00048：
+     * PIDF: p=0.0064, i=0, d=0, f=0.00048：
      *   (55.6, 22.76) -> 1090，(55.43, 14.76) -> 1110，(32.17, 20.28) -> 1150，
      *   (55.6, 6.7) -> 1160，(35.43, 9.06) -> 1180，(82.64, 8.07) -> 1210。
-     * 距离 = 机器人中心到默认红方瞄准点 (RED_AIM_X, RED_AIM_Y) = (57.7, 53)：
-     *   30.31，38.31，41.50，46.35，49.26，51.39。换了瞄准点要重算。
-     * 新测的点按距离从小到大插进去，两个数组长度要一样。
+     * 距离 =  (RED_AIM_X, RED_AIM_Y) = (57.7, 53)：
+     *   30.31，38.31，41.50，46.35，49.26，51.39。
      */
     public static double[] SHOT_DIST_IN = {30.31, 38.31, 41.50, 46.35, 49.26, 51.39};
     public static double[] SHOT_VEL = {1090.0, 1110.0, 1150.0, 1160.0, 1190.0, 1210.0};
@@ -54,13 +45,13 @@ public class ShooterSubsystem extends SubsystemBase {
 
     // ---------- 控制器 ----------
     public static boolean USE_PID = true;
-    public static double VELOCITY_P = 0.0064;
+    public static double VELOCITY_P = 0.0063;
     public static double VELOCITY_I = 0;
     public static double VELOCITY_D = 0;
     public static boolean USE_F = true;
     public static double VELOCITY_F = 0.00048;
 
-    public static double RESET_THRESHOLD = 150;
+    public static double RESET_THRESHOLD = 100;
     /** 误差在这范围内算"到速"。 */
     public static double READY_TOLERANCE = 60;
 
@@ -82,7 +73,6 @@ public class ShooterSubsystem extends SubsystemBase {
     private boolean usingF;
     private State lastState = null;
 
-    // 仅用于 telemetry
     private double error, feedforward, pTerm, iTerm, dTerm, output;
 
     public ShooterSubsystem(HardwareMap hardwareMap) {
@@ -121,7 +111,6 @@ public class ShooterSubsystem extends SubsystemBase {
         setState(State.STOP);
     }
 
-    /** 以固定速度（ticks/s）运行，不查距离表。 */
     public void setVelocity(double velocity) {
         customVel = velocity;
         setState(State.CUSTOM);
@@ -132,7 +121,7 @@ public class ShooterSubsystem extends SubsystemBase {
         this.distanceSupplier = distanceSupplier;
     }
 
-    /** 最近一次用于查表的距离（英寸），没有时为 NaN。 */
+    /** 最近一次用于查表的距离*/
     public double getDistance() {
         return lastDistance;
     }
@@ -151,7 +140,6 @@ public class ShooterSubsystem extends SubsystemBase {
             if (!EXTRAPOLATE) {
                 distance = Range.clip(distance, xs[0], xs[last]);
             }
-            // 找所在的那一段；表外时用两端那一段外推
             int i = 0;
             while (i < last - 1 && distance > xs[i + 1]) {
                 i++;
@@ -163,7 +151,6 @@ public class ShooterSubsystem extends SubsystemBase {
         return Range.clip(v, MIN_SHOT_VEL, MAX_SHOT_VEL);
     }
 
-    /** 当前档位对应的shooter速度 */
     public double getTargetVelocity() {
         switch (state) {
             case ACCELERATE:
@@ -268,7 +255,6 @@ public class ShooterSubsystem extends SubsystemBase {
         double candidateIntegral = integral + error * dt;
         double trial = base + VELOCITY_I * candidateIntegral;
 
-        // 只在没饱和、或误差在把输出往回拉时才积分
         if ((trial >= -1.0 && trial <= 1.0)
                 || (trial > 1.0 && error < 0.0)
                 || (trial < -1.0 && error > 0.0)) {
@@ -307,7 +293,6 @@ public class ShooterSubsystem extends SubsystemBase {
         if (usingPid == USE_PID) {
             return;
         }
-        // 先用旧模式停下再切换（包括 Panels 里实时改）
         stopMotor();
         usingPid = USE_PID;
         shooterUp.setMode(runMode());

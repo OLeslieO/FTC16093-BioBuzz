@@ -9,6 +9,7 @@ import com.pedropathing.api.Paths;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
+import com.pedropathing.paths.interpolator.Interpolator;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
 import org.firstinspires.ftc.teamcode.opmodes.AutoCommandBase;
@@ -51,24 +52,23 @@ public class Full2Tip extends AutoCommandBase {
 
                 // 中间一排
                 follow(startToPrepmid()),
-//                flowerDown(),
+                flowerDown(),
                 waitMs(FLOWER_DOWN_MS),
                 follow(prepmidToFlowermid()),
                 waitMs(FLOWER_MID_MS),
                 follow(flowermidToPrepmid()),
-//                flowerUp(),
+                flowerUp(),
                 follow(prepmidToShoottop()),
                 waitMs(SETTLE_MS),
                 shoot(SHOOT_TOP_GATE_MS),
 
-                // 上方一排
-                follow(shoottopToPreptop()),
-//                flowerDown(),
+                // 上方一排（射球点 SHOOT_TOP 即上方吸球准备点，直接往前吸）
+                flowerDown(),
                 waitMs(FLOWER_DOWN_MS),
                 follow(preptopToFlowertop()),
                 waitMs(FLOWER_TOP_MS),
                 shoot(1000),
-//                flowerUp(),
+                flowerUp(),
 
                 // 下方装填区
                 follow(flowertopToPrepbot()),
@@ -106,24 +106,24 @@ public class Full2Tip extends AutoCommandBase {
         return Paths.curve(a, CTRL_PREP_MID_TO_SHOOT_TOP.pose(), b).linear(a, b);
     }
 
-    public Path shoottopToPreptop() {
-        Pose a = SHOOT_TOP.pose(), b = PREP_TOP.pose();
-        return Paths.line(a, b).linear(a, b);
-    }
-
     public Path preptopToFlowertop() {
-        Pose a = PREP_TOP.pose(), b = FLOWER_TOP.pose();
+        Pose a = SHOOT_TOP.pose(), b = FLOWER_TOP.pose();
         return Paths.line(a, b).linear(a, b);
     }
 
     public Path flowertopToPrepbot() {
         Pose a = FLOWER_TOP.pose(), b = PREP_BOT.pose();
-        return Paths.curve(a,CTRL_FLOWERTOP_PREPBOT_1.pose(),CTRL_FLOWERTOP_PREPBOT_2.pose(), b).linear(a, b);
+        // 前 15% 保持 90°，之后从 90° 转到 -90°
+        Pose hold = PREP_BOT.pose(90), turnEnd = PREP_BOT.pose(-90);
+        return Paths.curve(a, CTRL_FLOWERTOP_PREPBOT_1.pose(), CTRL_FLOWERTOP_PREPBOT_2.pose(), b)
+                .heading(Interpolator.piecewise()
+                        .until(FLOWERTOP_PREPBOT_HOLD_T, Interpolator.linear(hold, hold))
+                        .until(1, Interpolator.linear(hold, turnEnd)));
     }
 
     public Path prepbotToLoadbot() {
         Pose a = PREP_BOT.pose(), b = LOAD_BOT.pose();
-        return Paths.line(a, b).linear(a, b);
+        return Paths.line(a, b).tangent();
     }
 
     public Path loadbotToShoottop() {

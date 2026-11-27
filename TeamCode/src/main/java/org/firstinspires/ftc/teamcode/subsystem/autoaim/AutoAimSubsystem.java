@@ -21,12 +21,7 @@ import java.util.Objects;
 import java.util.function.Supplier;
 
 
-/**
- * 自瞄云台。两个舵机工作在位置模式（舵机自己闭环），这里只算目标角并换算成舵机位置；
- * Through Bore 编码器用来读实际角度（判断锁定、可选的稳态误差修正）。
- *
- * <p>舵机位置 = CENTER_POS + 角度 / TURRET_DEG_PER_POS，用 TurretPositionServoTest MODE 4 标定。
- */
+
 public class AutoAimSubsystem {
 
     private final ServoImplEx[] servos;
@@ -53,9 +48,7 @@ public class AutoAimSubsystem {
     private double error = 0.0;
     private double feedforwardVelocity = 0.0;
     private double measuredVelocity = 0.0;
-    /** 实际发给舵机的角度（rad）：目标 + 超前补偿 + 修正，经过限速。 */
     private double commandAngle = 0.0;
-    /** 编码器积分修正量（rad）。 */
     private double trim = 0.0;
     private double servoPosition = Double.NaN;
     private boolean pwmEnabled = false;
@@ -77,13 +70,11 @@ public class AutoAimSubsystem {
         this.poseSupplier = Objects.requireNonNull(poseSupplier);
         this.velocitySupplier = Objects.requireNonNull(velocitySupplier);
 
-        // 硬件配置里这两个口要设成 Servo，不是 Continuous Rotation Servo
         servos = new ServoImplEx[]{
                 hardwareMap.get(ServoImplEx.class, AutoAimConfig.SERVO_NAME_0),
                 hardwareMap.get(ServoImplEx.class, AutoAimConfig.SERVO_NAME_1)
         };
         applyServoConfig();
-        // 开瞄准之前不给 PWM，INIT 时云台不会突然转
         setPwmEnabled(false);
 
         encoder = hardwareMap.get(DcMotorEx.class, AutoAimConfig.ENCODER_NAME);
@@ -136,24 +127,19 @@ public class AutoAimSubsystem {
         return holding;
     }
 
-    // ---- 调参用：最近一圈控制器的内部量 ----
 
-    /** 最近一次发给舵机 0 的位置（0~1），没开 PWM 时为 NaN。 */
     public double getServoPosition() {
         return servoPosition;
     }
 
-    /** 实际发给舵机的角度（rad）。 */
     public double getCommandAngle() {
         return commandAngle;
     }
 
-    /** 编码器积分修正量（rad）。 */
     public double getTrim() {
         return trim;
     }
 
-    /** 目标角 − 当前角（rad）。 */
     public double getError() {
         return error;
     }
@@ -162,7 +148,6 @@ public class AutoAimSubsystem {
         return targetAngle;
     }
 
-    /** 滤波后的云台实测速度（rad/s）。 */
     public double getMeasuredVelocity() {
         return measuredVelocity;
     }
@@ -314,14 +299,6 @@ public class AutoAimSubsystem {
         locked = false;
     }
 
-    /**
-     * 目标角 → 舵机位置。舵机自己做位置闭环，这里只做三件事：
-     * <ol>
-     *   <li>超前补偿：目标在动时多给 feedforwardVelocity × SERVO_LEAD_TIME，抵消舵机跟随的滞后；</li>
-     *   <li>可选的编码器积分修正（TRIM_KI），补齿隙 / 标定误差带来的稳态偏差；</li>
-     *   <li>可选的限速（MAX_TURRET_VEL），舵机冲得太猛时打开。</li>
-     * </ol>
-     */
     private void driveTurret(double current, double dt) {
         double lo = minAngle();
         double hi = maxAngle();
@@ -361,10 +338,7 @@ public class AutoAimSubsystem {
         filteredVelocity = getTurretVelocity();
     }
 
-    // ---------------------------------------------------------------
-    // 几何辅助
-    // ---------------------------------------------------------------
-
+    //geometry
     private static Pose pivotOf(ChassisMotionPredictor.Prediction state) {
         return TurretAimCalculator.pivotPose(
                 new Pose(state.x, state.y, state.heading),
@@ -372,7 +346,6 @@ public class AutoAimSubsystem {
                 AutoAimConfig.PIVOT_OFFSET_LEFT_IN);
     }
 
-    /** 旋转轴的场地速度 = 底盘速度 + ω × 偏移（偏移不在中心时，原地转也会让旋转轴移动）。 */
     private static double[] pivotVelocity(ChassisMotionPredictor.Prediction state, Pose pivot) {
         double rx = pivot.x() - state.x;
         double ry = pivot.y() - state.y;
@@ -382,7 +355,6 @@ public class AutoAimSubsystem {
         };
     }
 
-    /** 软死区：|x| ≤ band 时为 0，之外减去 band，保持符号且连续。 */
     private static double softDeadband(double x, double band) {
         return Math.abs(x) <= band ? 0.0 : x - Math.copySign(band, x);
     }
@@ -391,21 +363,12 @@ public class AutoAimSubsystem {
         return ticks / AutoAimConfig.ticksPerTurretRev() * 2.0 * Math.PI;
     }
 
-    // ---------------------------------------------------------------
-    // 舵机 / 编码器
-    // ---------------------------------------------------------------
 
-    /**
-     * 编码器读数符号。Through Bore 和 transfer 电机共用 intake1 端口，
-     * TransferSubsystem 会把这个电机设成 REVERSE，SDK 会连编码器读数一起取反，
-     * 所以这里把电机方向抵消掉，只认 ENCODER_REVERSED。
-     */
     private double encoderSign() {
         double motorDirSign = encoder.getDirection() == DcMotorSimple.Direction.REVERSE ? -1.0 : 1.0;
         return (AutoAimConfig.ENCODER_REVERSED ? -1.0 : 1.0) * motorDirSign;
     }
 
-    /** 方向、PWM 范围每圈检查，Panels 里改了立刻生效；PWM 范围只在变化时才写硬件。 */
     private void applyServoConfig() {
         servos[0].setDirection(AutoAimConfig.SERVO_REVERSED_0
                 ? Servo.Direction.REVERSE : Servo.Direction.FORWARD);
@@ -439,7 +402,6 @@ public class AutoAimSubsystem {
         pwmEnabled = on;
     }
 
-    /** 云台角（rad）→ 舵机位置。舵机 1 额外加 SERVO_1_TRIM，让两个舵机不互相顶。 */
     private void setServoAngle(double angleRad) {
         servoPosition = clip(angleToServoPosition(angleRad), 0.0, 1.0);
         servos[0].setPosition(servoPosition);
@@ -455,11 +417,7 @@ public class AutoAimSubsystem {
         return Math.toRadians((position - AutoAimConfig.CENTER_POS) * AutoAimConfig.TURRET_DEG_PER_POS);
     }
 
-    // ---------------------------------------------------------------
-    // 限位 / 遥测
-    // ---------------------------------------------------------------
 
-    /** 可用范围 = 机械限位（留 LIMIT_MARGIN）∩ 舵机 0~1 能到的范围。 */
     private static double minAngle() {
         double mech = Math.toRadians(AutoAimConfig.MIN_ANGLE_DEG + AutoAimConfig.LIMIT_MARGIN_DEG);
         double servo = Math.min(servoPositionToAngle(0.0), servoPositionToAngle(1.0));

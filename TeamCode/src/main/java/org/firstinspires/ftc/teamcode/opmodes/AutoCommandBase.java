@@ -171,6 +171,7 @@ public abstract class AutoCommandBase extends CommandOpModeEx {
             aim.enable();
             shooter.accelerate();
             transfer.setState(TransferSubsystem.State.INTAKE);
+            flowerUp();
         });
     }
     protected Command stopTransfer() {

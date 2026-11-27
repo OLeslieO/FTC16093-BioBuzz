@@ -20,7 +20,6 @@ public class TransferSubsystem extends SubsystemBase {
     public static String INTAKE_MOTOR_NAME = "intake";
     public static String PRE_SHOOTER_MOTOR_NAME = "preShooter";
 
-    // ---------- 各档功率：intake 和 preShooter 分开给 ----------
     public static double INTAKE_INTAKE_POW = 1.0;
     public static double INTAKE_PRE_SHOOTER_POW = 1.0;
 
@@ -64,12 +63,10 @@ public class TransferSubsystem extends SubsystemBase {
         setState(State.STOP);
     }
 
-    /** 两个电机给同一个功率。 */
     public void setPower(double power) {
         setPower(power, power);
     }
 
-    /** intake 和 preShooter 分别给功率。 */
     public void setPower(double intakePower, double preShooterPower) {
         customIntakePower = intakePower;
         customPreShooterPower = preShooterPower;

@@ -9,11 +9,9 @@ public class AutoAimConfig {
     public static String SERVO_NAME_0 = "lalaR";
     public static String SERVO_NAME_1 = "lalaL";
 
-    /** 舵机位置增大 = 云台逆时针转（俯视），编码器读数随之增大 */
     public static boolean SERVO_REVERSED_0 = false;
     public static boolean SERVO_REVERSED_1 = false;
 
-    /** Through Bore 电机端口 */
     public static String ENCODER_NAME = "preShooter";
 
     public static boolean ENCODER_REVERSED = false;
@@ -34,7 +32,6 @@ public class AutoAimConfig {
 
     public static double LIMIT_MARGIN_DEG = 3.0;
 
-    /** 云台旋转轴相对底盘旋转中心的偏移（英寸）。旋转轴就在底盘旋转中心上方，所以是 0。 */
     public static double PIVOT_OFFSET_FORWARD_IN = 0.0;
     public static double PIVOT_OFFSET_LEFT_IN = 0.0;
 
