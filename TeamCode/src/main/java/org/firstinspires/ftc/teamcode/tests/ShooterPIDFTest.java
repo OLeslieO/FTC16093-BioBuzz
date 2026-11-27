@@ -101,7 +101,7 @@ public class ShooterPIDFTest extends LinearOpMode {
             usingPid = USE_PID;
             usingF = USE_F;
             up.setDirection(DcMotorSimple.Direction.FORWARD);
-            down.setDirection(DcMotorSimple.Direction.FORWARD);
+            down.setDirection(DcMotorSimple.Direction.REVERSE);
             for (DcMotorEx m : new DcMotorEx[]{up, down}) {
                 m.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
                 m.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);

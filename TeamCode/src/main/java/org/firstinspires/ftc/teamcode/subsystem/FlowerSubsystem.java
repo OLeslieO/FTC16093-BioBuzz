@@ -15,10 +15,10 @@ public class FlowerSubsystem extends SubsystemBase {
         EXTENDED
     }
 
-    public static String FLOWER_SERVO_NAME = "flower";
+    public static String FLOWER_SERVO_NAME = "floweRr";
 
-    public static double RETRACTED_POSITION = 0.35;
-    public static double EXTENDED_POSITION = 0.96;
+    public static double RETRACTED_POSITION = 1;
+    public static double EXTENDED_POSITION = 0.48;
 
     private final Servo flowerServo;
 

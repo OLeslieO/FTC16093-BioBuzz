@@ -12,7 +12,7 @@ import com.pedropathing.paths.Path;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
 import org.firstinspires.ftc.teamcode.opmodes.AutoCommandBase;
-
+//最后吸角落预置
 @Autonomous(name = "Full2Tip", group = "main")
 @Configurable
 public class Full2Tip extends AutoCommandBase {
@@ -67,6 +67,7 @@ public class Full2Tip extends AutoCommandBase {
                 waitMs(FLOWER_DOWN_MS),
                 follow(preptopToFlowertop()),
                 waitMs(FLOWER_TOP_MS),
+                shoot(1000),
 //                flowerUp(),
 
                 // 下方装填区
@@ -117,7 +118,7 @@ public class Full2Tip extends AutoCommandBase {
 
     public Path flowertopToPrepbot() {
         Pose a = FLOWER_TOP.pose(), b = PREP_BOT.pose();
-        return Paths.line(a, b).linear(a, b);
+        return Paths.curve(a,CTRL_FLOWERTOP_PREPBOT_1.pose(),CTRL_FLOWERTOP_PREPBOT_2.pose(), b).linear(a, b);
     }
 
     public Path prepbotToLoadbot() {

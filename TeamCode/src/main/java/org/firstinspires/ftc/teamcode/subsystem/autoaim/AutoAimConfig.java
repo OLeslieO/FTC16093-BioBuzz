@@ -6,8 +6,8 @@ import com.bylazar.configurables.annotations.Configurable;
 public class AutoAimConfig {
 
 
-    public static String SERVO_NAME_0 = "lala1";
-    public static String SERVO_NAME_1 = "lala2";
+    public static String SERVO_NAME_0 = "lalaR";
+    public static String SERVO_NAME_1 = "lalaL";
 
     /** 舵机位置增大 = 云台逆时针转（俯视），编码器读数随之增大 */
     public static boolean SERVO_REVERSED_0 = false;
@@ -29,8 +29,8 @@ public class AutoAimConfig {
 
     public static double ZERO_OFFSET_DEG = 0.0;
 
-    public static double MIN_ANGLE_DEG = -160.0;
-    public static double MAX_ANGLE_DEG = 160.0;
+    public static double MIN_ANGLE_DEG = -170.0;
+    public static double MAX_ANGLE_DEG = 170.0;
 
     public static double LIMIT_MARGIN_DEG = 3.0;
 

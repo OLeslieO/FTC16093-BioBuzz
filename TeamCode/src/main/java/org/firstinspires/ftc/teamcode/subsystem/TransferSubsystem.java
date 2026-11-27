@@ -18,21 +18,29 @@ public class TransferSubsystem extends SubsystemBase {
     }
 
     public static String INTAKE_MOTOR_NAME = "intake";
-    public static double INTAKE_POW = 1;
-    public static double OUTAKE_POW = -0.9;
-    public static double SHOOT_POW = 0.85;
-    public static double STOP_POW = 0.0;
+    public static String PRE_SHOOTER_MOTOR_NAME = "preShooter";
+
+    // ---------- 各档功率：intake 和 preShooter 分开给 ----------
+    public static double INTAKE_INTAKE_POW = 1.0;
+    public static double INTAKE_PRE_SHOOTER_POW = 1.0;
+
+    public static double OUTAKE_INTAKE_POW = -0.9;
+    public static double OUTAKE_PRE_SHOOTER_POW = 0;
+
+    public static double SHOOT_INTAKE_POW = 0.85;
+    public static double SHOOT_PRE_SHOOTER_POW = 0.95;
 
     private final DcMotorEx intake;
     private final DcMotorEx preShooter;
 
     private State state = State.STOP;
-    private double customPower = 0.0;
+    private double customIntakePower = 0.0;
+    private double customPreShooterPower = 0.0;
 
     public TransferSubsystem(HardwareMap hardwareMap) {
         intake = hardwareMap.get(DcMotorEx.class, INTAKE_MOTOR_NAME);
         intake.setDirection(DcMotorSimple.Direction.FORWARD);
-        preShooter = hardwareMap.get(DcMotorEx.class,"preShooter");
+        preShooter = hardwareMap.get(DcMotorEx.class, PRE_SHOOTER_MOTOR_NAME);
         preShooter.setDirection(DcMotorSimple.Direction.FORWARD);
     }
 
@@ -56,32 +64,53 @@ public class TransferSubsystem extends SubsystemBase {
         setState(State.STOP);
     }
 
+    /** 两个电机给同一个功率。 */
     public void setPower(double power) {
-        customPower = power;
+        setPower(power, power);
+    }
+
+    /** intake 和 preShooter 分别给功率。 */
+    public void setPower(double intakePower, double preShooterPower) {
+        customIntakePower = intakePower;
+        customPreShooterPower = preShooterPower;
         setState(State.CUSTOM);
     }
 
-    public double getTargetPower() {
+    public double getIntakePower() {
         switch (state) {
             case INTAKE:
-                return INTAKE_POW;
+                return INTAKE_INTAKE_POW;
             case OUTAKE:
-                return OUTAKE_POW;
+                return OUTAKE_INTAKE_POW;
             case SHOOT:
-                return SHOOT_POW;
-            case STOP:
-                return STOP_POW;
+                return SHOOT_INTAKE_POW;
             case CUSTOM:
-                return customPower;
+                return customIntakePower;
+            case STOP:
             default:
-                return STOP_POW;
+                return 0.0;
+        }
+    }
+
+    public double getPreShooterPower() {
+        switch (state) {
+            case INTAKE:
+                return INTAKE_PRE_SHOOTER_POW;
+            case OUTAKE:
+                return OUTAKE_PRE_SHOOTER_POW;
+            case SHOOT:
+                return SHOOT_PRE_SHOOTER_POW;
+            case CUSTOM:
+                return customPreShooterPower;
+            case STOP:
+            default:
+                return 0.0;
         }
     }
 
     @Override
     public void periodic() {
-        double power = getTargetPower();
-        intake.setPower(power);
-        preShooter.setPower(power);
+        intake.setPower(getIntakePower());
+        preShooter.setPower(getPreShooterPower());
     }
 }

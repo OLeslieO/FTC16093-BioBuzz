@@ -30,8 +30,8 @@ public class ShooterSubsystem extends SubsystemBase {
     public static String SHOOTER_DOWN_NAME = "shooterDown";
 
     // ---------- 目标（ticks/s） ----------
-    public static double ACCELERATE_VEL = 1540;
-    public static double IDLE_VEL = 600.0;
+    public static double ACCELERATE_VEL = 1160;
+    public static double IDLE_VEL = 800.0;
     public static double STOP_VEL = 0.0;
 
     // ---------- 按距离查表的射速（移动射球用） ----------
@@ -39,25 +39,26 @@ public class ShooterSubsystem extends SubsystemBase {
     public static boolean USE_DISTANCE_TABLE = true;
     /**
      * 距离（英寸，云台旋转轴到瞄准点 / 边走边射时的虚拟目标，必须递增）-> 射速（ticks/s）。
-     * 实测（机器人坐标 -> 射速）：
-     *   (55.67, 27.72) -> 1480，(59.49, 22.56) -> 1520，(55.91, 13.39) -> 1540，(55.64, 7.677) -> 1640。
-     * 距离 = 机器人中心到默认红方瞄准点 (RED_AIM_X, RED_AIM_Y) = (59, 57)：
-     *   29.47，34.44，43.72，49.44。换了瞄准点要重算。
+     * 实测（机器人坐标 -> 射速），PIDF: p=0.0064, i=0, d=0, f=0.00048：
+     *   (55.6, 22.76) -> 1090，(55.43, 14.76) -> 1110，(32.17, 20.28) -> 1150，
+     *   (55.6, 6.7) -> 1160，(35.43, 9.06) -> 1180，(82.64, 8.07) -> 1210。
+     * 距离 = 机器人中心到默认红方瞄准点 (RED_AIM_X, RED_AIM_Y) = (57.7, 53)：
+     *   30.31，38.31，41.50，46.35，49.26，51.39。换了瞄准点要重算。
      * 新测的点按距离从小到大插进去，两个数组长度要一样。
      */
-    public static double[] SHOT_DIST_IN = {29.47, 34.44, 43.72, 49.44};
-    public static double[] SHOT_VEL = {1520.0, 1560.0, 1580.0, 1680.0};
+    public static double[] SHOT_DIST_IN = {30.31, 38.31, 41.50, 46.35, 49.26, 51.39};
+    public static double[] SHOT_VEL = {1090.0, 1110.0, 1150.0, 1160.0, 1190.0, 1210.0};
     public static boolean EXTRAPOLATE = true;
-    public static double MIN_SHOT_VEL = 1440.0;
-    public static double MAX_SHOT_VEL = 1800.0;
+    public static double MIN_SHOT_VEL = 1000.0;
+    public static double MAX_SHOT_VEL = 1350.0;
 
     // ---------- 控制器 ----------
     public static boolean USE_PID = true;
-    public static double VELOCITY_P = 0.0038;
+    public static double VELOCITY_P = 0.0064;
     public static double VELOCITY_I = 0;
     public static double VELOCITY_D = 0;
     public static boolean USE_F = true;
-    public static double VELOCITY_F = 0.00051;
+    public static double VELOCITY_F = 0.00048;
 
     public static double RESET_THRESHOLD = 150;
     /** 误差在这范围内算"到速"。 */
@@ -90,7 +91,7 @@ public class ShooterSubsystem extends SubsystemBase {
         shooterUp.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
         shooterUp.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         shooterDown = hardwareMap.get(DcMotorEx.class, SHOOTER_DOWN_NAME);
-        shooterDown.setDirection(DcMotorSimple.Direction.FORWARD);
+        shooterDown.setDirection(DcMotorSimple.Direction.REVERSE);
         shooterDown.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
         shooterDown.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         usingPid = USE_PID;

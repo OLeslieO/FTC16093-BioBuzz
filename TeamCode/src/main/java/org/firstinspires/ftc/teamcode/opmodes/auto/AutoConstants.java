@@ -61,6 +61,10 @@ public class AutoConstants {
     public static FieldPoint FLOWER_TOP = new FieldPoint(48.86, 126.81, 90);
 
     // ================= 下方装填区 =================
+    public static FieldPoint CTRL_FLOWERTOP_PREPBOT_1 = new FieldPoint(24.5152, 127.5667, 0);
+    public static FieldPoint CTRL_FLOWERTOP_PREPBOT_2 = new FieldPoint(33.8294, 26.9064, 0);
+
+
 
     /** flowertopToPrepbot 终点：装填区准备点。 */
     public static FieldPoint PREP_BOT = new FieldPoint(9.09, 20.59, 270);

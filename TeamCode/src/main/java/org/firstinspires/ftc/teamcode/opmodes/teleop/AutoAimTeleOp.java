@@ -11,6 +11,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.opmodes.CommandOpModeEx;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
+import org.firstinspires.ftc.teamcode.subsystem.FlowerSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.GateSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.PPDriveSubsystem;
 import org.firstinspires.ftc.teamcode.subsystem.ShooterSubsystem;
@@ -20,7 +21,7 @@ import org.firstinspires.ftc.teamcode.util.Alliance;
 import org.firstinspires.ftc.teamcode.util.FieldConstants;
 
 /**
- * 比赛 TeleOp：底盘（Pedro）+ 自瞄云台 + shooter + transfer + gate，全部手柄 1。
+ * 比赛 TeleOp：底盘（Pedro，robot centric）+ 自瞄云台 + shooter + transfer + gate + flower，全部手柄 1。
  *
  * <p>INIT：X 蓝 / B 红 选联盟。紧跟 auto 时沿用 auto 结束的位姿和云台编码器；
  * 否则位姿 = START_X/Y/HEADING，云台要朝正前方（编码器清零）。
@@ -28,9 +29,9 @@ import org.firstinspires.ftc.teamcode.util.FieldConstants;
  * <ul>
  *   <li>左摇杆平移，右摇杆 x 转向；左扳机按住慢速</li>
  *   <li>右肩键：intake；左肩键：outtake（优先）</li>
- *   <li>右扳机：按住开 gate 射球，transfer 同时往里送</li>
- *   <li>自瞄一直开着；shooter 固定 SHOOTER_VEL 一直转</li>
- *   <li>dpad 左：切换瞄准点；Y：边走边射开关；A：robot / field centric 切换</li>
+ *   <li>右扳机：按住先开 gate，GATE_TO_FEED_DELAY 秒后 intake + preShooter 再往里送</li>
+ *   <li>自瞄一直开着；shooter 一直在 ACCELERATE 档，按自瞄算出的距离查表定转速</li>
+ *   <li>dpad 左：切换瞄准点；Y：边走边射开关；A：flower 收起 / 伸出切换（默认收起）</li>
  *   <li>back：位姿重置为 START 位姿</li>
  * </ul>
  * 云台锁定 + shooter 到速时手柄震一下。
@@ -48,10 +49,10 @@ public class AutoAimTeleOp extends CommandOpModeEx {
     public static double TRIGGER_THRESHOLD = 0.5;
     public static double BRAKE_STICK_THRESHOLD = 0.05;
 
-    /** shooter 固定转速（ticks/s），Panels 里改实时生效。 */
-    public static double SHOOTER_VEL = 1540;
     /** true = 只有锁定且到速才开 gate（按住扳机等它就绪）。 */
     public static boolean REQUIRE_READY_TO_SHOOT = false;
+    /** 右扳机开 gate 后，等这么久（s）再开 intake 和 preShooter。 */
+    public static double GATE_TO_FEED_DELAY = 0.2;
 
     private Telemetry out;
     private Follower follower;
@@ -60,12 +61,15 @@ public class AutoAimTeleOp extends CommandOpModeEx {
     private ShooterSubsystem shooter;
     private TransferSubsystem transfer;
     private GateSubsystem gate;
+    private FlowerSubsystem flower;
 
     private boolean poseRestored = false;
 
     private boolean lastDpadLeft, lastY, lastA, lastBack;
     private boolean lastReady = false;
     private double lastTime;
+    /** gate 这一次打开的时刻（getRuntime），没开时为 NaN。 */
+    private double gateOpenTime = Double.NaN;
 
     @Override
     public void initialize() {
@@ -90,14 +94,18 @@ public class AutoAimTeleOp extends CommandOpModeEx {
         shooter = new ShooterSubsystem(hardwareMap);
         transfer = new TransferSubsystem(hardwareMap);
         gate = new GateSubsystem(hardwareMap);
+        flower = new FlowerSubsystem(hardwareMap);
         shooter.stop();
         transfer.stop();
         gate.stop();
-        register(shooter, transfer, gate);
+        flower.retract();
+        register(shooter, transfer, gate, flower);
 
         // 云台编码器和 transfer 的 preShooter 共用一个口，所以要在 transfer 之后建。
         // 紧跟 auto 时不清零，沿用 auto 里的角度。
         aim = new AutoAimSubsystem(hardwareMap, out, drive::getPose, drive::getVelocity, !poseRestored);
+        // ACCELERATE 档按这个距离查表；没有有效距离时用 ShooterSubsystem.ACCELERATE_VEL
+        shooter.setDistanceSupplier(aim::getShotDistance);
     }
 
     @Override
@@ -130,7 +138,7 @@ public class AutoAimTeleOp extends CommandOpModeEx {
         drive.startTeleOp();
         FieldConstants.AIM_POINT_INDEX = FieldConstants.aimPointIndexForY(drive.getPose().y());
         aim.enable();
-        shooter.setVelocity(SHOOTER_VEL);
+        shooter.accelerate();
         lastTime = getRuntime();
     }
 
@@ -148,7 +156,7 @@ public class AutoAimTeleOp extends CommandOpModeEx {
             aim.setShootOnTheMove(!aim.isShootOnTheMove());
         }
         if (gamepad1.a && !lastA) {
-            drive.toggleDriveMode();
+            flower.toggle();
         }
         if (gamepad1.back && !lastBack) {
             drive.setPose(startPose());
@@ -171,27 +179,32 @@ public class AutoAimTeleOp extends CommandOpModeEx {
         // ---- 射球 / transfer / gate ----
         boolean ready = aim.isLocked() && shooter.isReady();
         boolean shootHeld = gamepad1.right_trigger > TRIGGER_THRESHOLD;
-        boolean gateOpen = shootHeld && (!REQUIRE_READY_TO_SHOOT || ready);
+        boolean gateOpen = shootHeld && (!REQUIRE_READY_TO_SHOOT || ready) && !gamepad1.left_bumper;
+
+        if (gateOpen) {
+            if (Double.isNaN(gateOpenTime)) {
+                gateOpenTime = now;
+            }
+            gate.shoot();
+        } else {
+            gateOpenTime = Double.NaN;
+            gate.stop();
+        }
+        // gate 开够 GATE_TO_FEED_DELAY 秒才开始送球
+        boolean feed = gateOpen && now - gateOpenTime >= GATE_TO_FEED_DELAY;
 
         if (gamepad1.left_bumper) {
             transfer.setState(TransferSubsystem.State.OUTAKE);
-        } else if (gamepad1.right_bumper || shootHeld) {
+        } else if (feed || (gamepad1.right_bumper && !shootHeld)) {
             transfer.setState(TransferSubsystem.State.INTAKE);
         } else {
             transfer.stop();
-        }
-
-        if (gateOpen && !gamepad1.left_bumper) {
-            gate.shoot();
-        } else {
-            gate.stop();
         }
 
 
         lastReady = ready;
 
         // ---- 更新：先定位，再按新位姿切瞄准点、瞄准，最后 subsystem 写硬件----
-        shooter.setVelocity(SHOOTER_VEL);
         drive.update();
         FieldConstants.updateAimPointForY(drive.getPose().y());
         aim.update();
@@ -206,6 +219,7 @@ public class AutoAimTeleOp extends CommandOpModeEx {
         out.addData("Shot Distance", "%.1f in", aim.getShotDistance());
         out.addData("Transfer", transfer.getState());
         out.addData("Gate", gate.getState());
+        out.addData("Flower", flower.getState());
         out.addData("loop_ms", "%.1f", loopMs);
         out.update();
     }

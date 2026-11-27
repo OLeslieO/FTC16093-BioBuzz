@@ -12,12 +12,11 @@ import com.pedropathing.paths.Path;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
 import org.firstinspires.ftc.teamcode.opmodes.AutoCommandBase;
-
+//先吸角落预置，再吸两个flower
 @Autonomous(name = "Full2TipV666", group = "main")
 @Configurable
 public class Full2TipV666 extends AutoCommandBase {
 
-    /** 起点朝向（START 共用坐标，这条路线朝 180 出发）。 *//** SHOOT_TOP_2 在这条路线里的朝向。 */
     public static double SHOOT_HEADING = 70;
 
     /** 开局 shooter 加速多久再开门（毫秒）。 */
@@ -45,12 +44,11 @@ public class Full2TipV666 extends AutoCommandBase {
     @Override
     public Command runAutoCommand() {
         return sequential(
-                // 开局：自动瞄准 + shooter 加速 + transfer 一直转，原地射预装球
                 startAuto(),
                 waitMs(SPIN_UP_MS),
                 shoot(PRELOAD_GATE_MS),
 
-                // 下方装填区
+                // 下方
                 follow(startToPrepbot2()),
                 follow(prepbot2ToLoadbot2()),
                 waitMs(LOAD_BOT_MS),
@@ -78,20 +76,17 @@ public class Full2TipV666 extends AutoCommandBase {
                 waitMs(SETTLE_MS),
                 shoot(SHOOT_GATE_MS),
 
-                // 停车
                 follow(shoottop2ToPark()),
                 stopAll()
         );
     }
 
-    // ================= 本路线专用朝向 =================
 
 
     private Pose shootTop2() {
         return SHOOT_TOP_2.pose(SHOOT_HEADING);
     }
 
-    // ================= 路径 =================
 
     public Path startToPrepbot2() {
         Pose a = START_BOT_STRAFE.pose(), b = PREP_BOT_2.pose();
